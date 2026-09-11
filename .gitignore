@@ -1,0 +1,31 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+
+# Runtime inputs, outputs, and locally supplied model weights.
+input/*
+!input/.gitkeep
+output/*
+!output/.gitkeep
+models/*.pt
+models/**/*.pt
+models/**/*.onnx
+runs/
+storage/input/*
+!storage/input/.gitkeep
+storage/output/*
+!storage/output/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# Local training data is intentionally not committed.
+datasets/ultrasound_roi/images/train/*
+!datasets/ultrasound_roi/images/train/.gitkeep
+datasets/ultrasound_roi/images/val/*
+!datasets/ultrasound_roi/images/val/.gitkeep
+datasets/ultrasound_roi/labels/train/*
+!datasets/ultrasound_roi/labels/train/.gitkeep
+datasets/ultrasound_roi/labels/val/*
+!datasets/ultrasound_roi/labels/val/.gitkeep

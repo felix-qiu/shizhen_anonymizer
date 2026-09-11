@@ -1,0 +1,19 @@
+model:
+  name: yolo11s.pt
+  version: v1
+
+train:
+  epochs: 100
+  imgsz: 640
+  batch: 16
+
+dataset:
+  path: datasets/ultrasound_roi
+  yaml: training/dataset.yaml
+
+output:
+  dir: runs
+  name: train
+
+export:
+  dir: models/trained

@@ -1,0 +1,8 @@
+path: datasets/ultrasound_roi
+
+train: images/train
+val: images/val
+
+names:
+  0: ultrasound_roi
+

@@ -1,0 +1,13 @@
+server:
+  host: 0.0.0.0
+  port: 8000
+
+storage:
+  input_dir: storage/input
+  output_dir: storage/output
+
+model:
+  path: models/yolo11s_roi.pt
+
+logging:
+  file: logs/app.log

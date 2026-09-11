@@ -1,0 +1,15 @@
+model:
+  path: models/yolo11s_roi.pt
+
+device:
+  type: auto
+
+confidence:
+  threshold: 0.7
+
+output:
+  size: 640
+
+video:
+  detect_interval: 30
+  output_fps: same

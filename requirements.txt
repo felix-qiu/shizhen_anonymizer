@@ -1,0 +1,12 @@
+ultralytics
+torch
+torchvision
+opencv-python
+pillow
+numpy
+pyyaml
+pytest
+fastapi
+uvicorn
+python-multipart
+httpx
