@@ -20,6 +20,20 @@ from training.config import (
 )
 
 
+def resolve_training_device(device: str) -> str:
+    """Resolve ``auto`` to CUDA, Apple MPS, or CPU in priority order."""
+
+    if device != "auto":
+        return device
+    import torch
+
+    if torch.cuda.is_available():
+        return "cuda"
+    if torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
 def train_model(
     config: TrainingConfig, yolo_factory: Callable[[str], Any] | None = None
 ) -> Path:
@@ -38,6 +52,7 @@ def train_model(
             epochs=config.epochs,
             imgsz=config.imgsz,
             batch=config.batch,
+            device=resolve_training_device(config.device),
             project=str(config.output_dir),
             name=config.run_name,
             save=True,
@@ -56,6 +71,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--epochs", type=int)
     parser.add_argument("--imgsz", type=int)
     parser.add_argument("--batch", type=int)
+    parser.add_argument("--device")
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--name")
     return parser.parse_args()
@@ -74,6 +90,7 @@ def main() -> int:
         epochs=args.epochs if args.epochs is not None else base.epochs,
         imgsz=args.imgsz if args.imgsz is not None else base.imgsz,
         batch=args.batch if args.batch is not None else base.batch,
+        device=args.device or base.device,
         output_dir=(args.output_dir or base.output_dir).resolve(),
         run_name=args.name or base.run_name,
         export_dir=base.export_dir,

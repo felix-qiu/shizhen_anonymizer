@@ -9,10 +9,12 @@ from time import perf_counter
 
 from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from api.image_api import router as image_router
 from api.logging_config import configure_logging
+from api.output_api import router as output_router
 from api.schemas import ErrorResponse
 from api.video_api import router as video_router
 from service.file_manager import FileManager
@@ -24,6 +26,7 @@ from src.errors import CleanerError, ErrorCode
 from src.model.model_manager import ModelManager
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+WEB_ROOT = PROJECT_ROOT / "web"
 ERROR_STATUS = {
     ErrorCode.FILE_NOT_FOUND: 404,
     ErrorCode.MODEL_NOT_FOUND: 503,
@@ -91,6 +94,16 @@ def create_app(
     application.state.logger = logger
     application.include_router(image_router)
     application.include_router(video_router)
+    application.include_router(output_router)
+    application.mount(
+        "/assets",
+        StaticFiles(directory=WEB_ROOT / "assets"),
+        name="web-assets",
+    )
+
+    @application.get("/", include_in_schema=False)
+    async def frontend() -> FileResponse:
+        return FileResponse(WEB_ROOT / "index.html", media_type="text/html")
 
     @application.get("/health", tags=["system"])
     async def health() -> dict[str, str]:

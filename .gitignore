@@ -1,8 +1,10 @@
 __pycache__/
 *.py[cod]
+*.cache
 .pytest_cache/
 .ruff_cache/
 .venv/
+web/node_modules/
 
 # Runtime inputs, outputs, and locally supplied model weights.
 input/*
@@ -12,6 +14,7 @@ output/*
 models/*.pt
 models/**/*.pt
 models/**/*.onnx
+/yolo11*.pt
 runs/
 storage/input/*
 !storage/input/.gitkeep
@@ -25,7 +28,18 @@ datasets/ultrasound_roi/images/train/*
 !datasets/ultrasound_roi/images/train/.gitkeep
 datasets/ultrasound_roi/images/val/*
 !datasets/ultrasound_roi/images/val/.gitkeep
+datasets/ultrasound_roi/images/test/*
+!datasets/ultrasound_roi/images/test/.gitkeep
 datasets/ultrasound_roi/labels/train/*
 !datasets/ultrasound_roi/labels/train/.gitkeep
 datasets/ultrasound_roi/labels/val/*
 !datasets/ultrasound_roi/labels/val/.gitkeep
+datasets/ultrasound_roi/labels/test/*
+!datasets/ultrasound_roi/labels/test/.gitkeep
+datasets/ultrasound_roi/metadata.json
+reports/*.json
+reports/*.md
+reports/images/*
+!reports/images/.gitkeep
+reports/errors/*/*
+!reports/errors/*/.gitkeep

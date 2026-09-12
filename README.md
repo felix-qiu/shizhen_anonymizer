@@ -8,12 +8,29 @@
 
 ## 环境安装
 
-需要 Python 3.11 或更高版本。建议使用虚拟环境：
+项目使用 uv 管理 Python 3.11、虚拟环境和依赖。首次安装：
 
 ```bash
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+uv python install 3.11
+uv sync
+```
+
+`uv sync` 会根据 `.python-version` 和 `uv.lock` 自动创建 `.venv`，无需手动运行 `python -m venv` 或 `pip install`。在 CI 和部署环境中使用 `uv sync --locked`，确保锁文件未发生漂移。
+
+常用依赖管理命令：
+
+```bash
+# 添加运行依赖
+uv add <package>
+
+# 添加开发依赖
+uv add --dev <package>
+
+# 更新并重新锁定依赖
+uv lock --upgrade
+
+# 在项目环境中执行命令
+uv run <command>
 ```
 
 ## 模型准备
@@ -31,13 +48,13 @@ models/yolo11s_roi.pt
 默认读取 `input/test.png` 并写入 `output/test_clean.png`：
 
 ```bash
-python examples/clean_image.py
+uv run python examples/clean_image.py
 ```
 
 也可以指定路径：
 
 ```bash
-python examples/clean_image.py \
+uv run python examples/clean_image.py \
   --input input/example.jpg \
   --output output/example_clean.png \
   --config config/config.yaml
@@ -58,13 +75,13 @@ Output: output/test_clean.png
 默认读取 `input/test.mp4` 并写入 `output/test_clean.mp4`：
 
 ```bash
-python examples/clean_video.py
+uv run python examples/clean_video.py
 ```
 
 也可以指定路径：
 
 ```bash
-python examples/clean_video.py \
+uv run python examples/clean_video.py \
   --input input/example.mp4 \
   --output output/example_clean.mp4 \
   --config config/config.yaml
@@ -108,20 +125,20 @@ Phase 3 增加了超声 ROI 数据集目录、YOLO11 训练、验证、版本化
 准备 YOLO Detection 格式数据后执行：
 
 ```bash
-python training/train.py
+uv run python training/train.py
 ```
 
 验证最佳模型：
 
 ```bash
-python training/validate.py \
+uv run python training/validate.py \
   --model runs/train/weights/best.pt
 ```
 
 导出版本化 PT 或 ONNX 模型：
 
 ```bash
-python training/export.py \
+uv run python training/export.py \
   --model runs/train/weights/best.pt \
   --format onnx
 ```
@@ -131,7 +148,7 @@ python training/export.py \
 ## 测试
 
 ```bash
-pytest -q
+uv run pytest -q
 ```
 
 测试覆盖 bbox 裁剪、图片和视频处理、ROI 间隔检测与复用、训练配置、训练参数传递、验证指标提取、PT/ONNX 导出、模型缓存、文件管理、HTTP 接口及统一错误响应。
@@ -149,7 +166,22 @@ models/yolo11s_roi.pt
 启动服务：
 
 ```bash
-uvicorn api.main:app --host 0.0.0.0 --port 8000
+uv run uvicorn api.main:app --host 0.0.0.0 --port 8000
+```
+
+浏览器操作页面：
+
+```text
+http://localhost:8000/
+```
+
+页面使用本地编译的 Tailwind CSS，支持拖放或选择图片、MP4 视频，调用清洗接口后对比原始媒体与标准化 ROI，并下载处理结果。服务运行时不需要 Node.js。仅在修改前端样式时安装并重新构建 CSS：
+
+```bash
+cd web
+npm install
+npm run build:css
+cd ..
 ```
 
 服务配置位于 `config/server.yaml`，运行日志写入 `logs/app.log`。Swagger 文档地址为：
@@ -180,7 +212,45 @@ curl -X POST \
   http://localhost:8000/api/v1/video/clean
 ```
 
+读取清洗结果（`output` 为清洗接口返回的文件名）：
+
+```text
+GET /api/v1/output/{output}
+```
+
 上传文件使用时间戳和 UUID 生成内部文件名，保存在 `storage/input`；结果保存在 `storage/output`。统一 API 错误码包括 `FILE_NOT_FOUND`、`INVALID_FILE`、`MODEL_NOT_FOUND`、`ROI_NOT_FOUND` 和 `PROCESS_FAILED`。
+
+## 数据集管理与模型评估
+
+Phase 5 使用 `datasets/ultrasound_roi/dataset.yaml` 作为训练、验证和测试数据的统一入口。测试集新增 `images/test` 和 `labels/test`，可选的 `metadata.json` 用于厂家和设备型号维度分析。
+
+校验数据集：
+
+```bash
+uv run python tools/validate_dataset.py
+```
+
+生成数据统计：
+
+```bash
+uv run python tools/dataset_statistics.py
+```
+
+使用模型执行完整评估：
+
+```bash
+uv run python evaluation/evaluate_roi.py \
+  --model models/trained/yolo11s_ultrasound_roi_v1.pt
+```
+
+使用预计算预测复现评估：
+
+```bash
+uv run python evaluation/evaluate_roi.py \
+  --predictions predictions.json
+```
+
+结果写入 `reports/metrics.json`、`reports/report.md`、`reports/images` 和 `reports/errors`。指标包括 IoU、Precision、Recall、mAP50、mAP50-95、ROI 覆盖率、低置信风险，以及厂家和设备型号分组指标。详细格式参见 `evaluation/README.md`。
 
 ## 当前限制
 
@@ -200,6 +270,9 @@ curl -X POST \
 - 启动时模型加载与跨请求缓存
 - 唯一上传文件命名和统一错误响应
 - 请求、推理耗时、置信度及输出文件日志
+- train、val、test 数据集规范与校验
+- 分辨率、厂家、设备型号及 ROI 面积统计
+- ROI 指标、预测可视化、错误分类和 Markdown 报告
 
 当前不支持：
 
@@ -210,8 +283,9 @@ curl -X POST \
 - MP4 以外的视频输出格式
 - DICOM
 - Docker
-- 用户权限、数据库和 Web 前端
+- 用户权限和数据库
 - OCR 或其他多任务模型训练
+- 自动标注和 Active Learning
 
 ## 后续建议
 

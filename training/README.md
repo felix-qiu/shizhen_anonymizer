@@ -34,26 +34,29 @@ class_id x_center y_center width height
 
 建议按设备厂家、型号和检查类型分层划分训练集与验证集，避免同一患者或同一视频的相邻帧同时出现在两个集合中，造成数据泄漏。
 
-训练和验证命令会在运行时生成带绝对数据集根路径的临时 YAML，避免用户机器上的 Ultralytics 全局 `datasets_dir` 设置改变相对路径解析。仓库中的 `training/dataset.yaml` 保持可移植，不会被改写。
+训练和验证命令会在运行时生成带绝对数据集根路径的临时 YAML，避免用户机器上的 Ultralytics 全局 `datasets_dir` 设置改变相对路径解析。仓库中的 `datasets/ultrasound_roi/dataset.yaml` 保持可移植，不会被改写。
 
 ## 训练
 
 项目默认配置位于 `config/train.yaml`：
 
 ```bash
-python training/train.py
+uv run python training/train.py
 ```
 
 命令行参数可以覆盖配置：
 
 ```bash
-python training/train.py \
+uv run python training/train.py \
   --model yolo11s.pt \
-  --data training/dataset.yaml \
+  --data datasets/ultrasound_roi/dataset.yaml \
   --epochs 100 \
   --imgsz 640 \
-  --batch 16
+  --batch 16 \
+  --device auto
 ```
+
+`--device auto` 会依次选择 NVIDIA CUDA、Apple Silicon MPS 或 CPU，也可以显式传入 `mps`、`cuda` 或 `cpu`。
 
 Ultralytics 会在首次使用模型名称时下载官方预训练权重。默认输出位于：
 
@@ -69,9 +72,9 @@ runs/train/weights/last.pt
 ## 验证
 
 ```bash
-python training/validate.py \
+uv run python training/validate.py \
   --model runs/train/weights/best.pt \
-  --data training/dataset.yaml
+  --data datasets/ultrasound_roi/dataset.yaml
 ```
 
 命令会输出 `mAP50`、`mAP50-95`、Precision 和 Recall。模型上线前还应按设备厂家和设备型号分别检查指标，并人工审核漏裁、过度裁剪和 UI 信息残留样本。
@@ -81,7 +84,7 @@ python training/validate.py \
 导出 ONNX：
 
 ```bash
-python training/export.py \
+uv run python training/export.py \
   --model runs/train/weights/best.pt \
   --format onnx
 ```
@@ -89,7 +92,7 @@ python training/export.py \
 保存 PyTorch 权重副本：
 
 ```bash
-python training/export.py \
+uv run python training/export.py \
   --model runs/train/weights/best.pt \
   --format pt
 ```

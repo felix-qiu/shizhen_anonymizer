@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/shizhen_anonymizer.iml" filepath="$PROJECT_DIR$/.idea/shizhen_anonymizer.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/shizhen-anonymizer.iml" filepath="$PROJECT_DIR$/.idea/shizhen-anonymizer.iml" />
     </modules>
   </component>
 </project>

@@ -1,0 +1,10 @@
+evaluation:
+  decision_iou: 0.5
+  coverage_threshold: 0.95
+  low_confidence_threshold: 0.7
+  small_roi_threshold: 0.2
+  inference_confidence: 0.001
+
+output:
+  dir: reports
+

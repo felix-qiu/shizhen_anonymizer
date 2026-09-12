@@ -1,0 +1,82 @@
+@import "tailwindcss" source("../");
+
+@theme {
+  --color-ink: #071315;
+  --color-panel: #0c1d1f;
+  --color-paper: #eef5f2;
+  --color-mist: #b8c9c5;
+  --color-signal: #36d6bd;
+  --color-amber: #f1a43b;
+  --font-sans: "Avenir Next", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  --font-mono: "SFMono-Regular", "Roboto Mono", monospace;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    min-width: 320px;
+    background: var(--color-ink);
+    color: var(--color-paper);
+  }
+
+  button,
+  label,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-signal);
+    outline-offset: 3px;
+  }
+}
+
+.scan-grid {
+  background-color: #03090a;
+  background-image:
+    linear-gradient(rgba(54, 214, 189, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(54, 214, 189, 0.04) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.scan-grid::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  background: radial-gradient(circle at 50% 120%, rgba(54, 214, 189, 0.12), transparent 52%);
+}
+
+.is-processing::after {
+  position: absolute;
+  inset: -60% 0 auto;
+  height: 55%;
+  pointer-events: none;
+  content: "";
+  background: linear-gradient(to bottom, transparent, rgba(54, 214, 189, 0.2), transparent);
+  animation: scan 1.8s linear infinite;
+}
+
+.drop-active {
+  border-color: var(--color-signal);
+  background: rgba(54, 214, 189, 0.09);
+}
+
+@keyframes scan {
+  to {
+    transform: translateY(290%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

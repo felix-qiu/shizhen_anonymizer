@@ -31,6 +31,7 @@ class TrainingConfig:
     epochs: int
     imgsz: int
     batch: int
+    device: str
     output_dir: Path
     run_name: str
     export_dir: Path
@@ -102,6 +103,7 @@ def load_training_config(
         epochs=epochs,
         imgsz=imgsz,
         batch=batch,
+        device=str(raw["train"].get("device", "auto")),
         output_dir=_project_path(raw["output"]["dir"], project).resolve(),
         run_name=str(raw["output"].get("name", "train")),
         export_dir=_project_path(raw["export"]["dir"], project).resolve(),

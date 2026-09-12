@@ -31,11 +31,12 @@ def test_train_model_passes_config_to_yolo(tmp_path: Path) -> None:
     config = TrainingConfig(
         model="yolo11s.pt",
         model_version="test-v1",
-        dataset_yaml=PROJECT_ROOT / "training/dataset.yaml",
+        dataset_yaml=PROJECT_ROOT / "datasets/ultrasound_roi/dataset.yaml",
         dataset_root=PROJECT_ROOT / "datasets/ultrasound_roi",
         epochs=12,
         imgsz=512,
         batch=4,
+        device="cpu",
         output_dir=tmp_path / "runs",
         run_name="train",
         export_dir=tmp_path / "artifacts",
@@ -47,6 +48,7 @@ def test_train_model_passes_config_to_yolo(tmp_path: Path) -> None:
     assert fake.arguments["epochs"] == 12
     assert fake.arguments["imgsz"] == 512
     assert fake.arguments["batch"] == 4
+    assert fake.arguments["device"] == "cpu"
     assert fake.arguments["save"] is True
     assert fake.dataset_config["path"] == str(config.dataset_root)
 
@@ -66,7 +68,7 @@ def test_validate_model_returns_detection_metrics(tmp_path: Path) -> None:
 
     metrics = validate_model(
         model_path,
-        PROJECT_ROOT / "training/dataset.yaml",
+        PROJECT_ROOT / "datasets/ultrasound_roi/dataset.yaml",
         imgsz=640,
         yolo_factory=lambda reference: fake_model,
     )

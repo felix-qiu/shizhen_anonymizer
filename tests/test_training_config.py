@@ -12,7 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_dataset_config_defines_ultrasound_roi_layout() -> None:
-    config = load_dataset_config("training/dataset.yaml", PROJECT_ROOT)
+    config = load_dataset_config("datasets/ultrasound_roi/dataset.yaml", PROJECT_ROOT)
 
     assert config.root == PROJECT_ROOT / "datasets/ultrasound_roi"
     assert config.train_images == config.root / "images/train"
@@ -28,9 +28,13 @@ def test_training_config_loads_phase_3_defaults() -> None:
     assert config.epochs == 100
     assert config.imgsz == 640
     assert config.batch == 16
+    assert config.device == "auto"
     assert config.output_dir == PROJECT_ROOT / "runs"
     assert config.run_name == "train"
     assert config.export_dir == PROJECT_ROOT / "models/trained"
+    assert config.dataset_yaml == (
+        PROJECT_ROOT / "datasets/ultrasound_roi/dataset.yaml"
+    )
 
 
 def test_model_version_rejects_path_components() -> None:

@@ -64,6 +64,19 @@ def test_health_endpoint(tmp_path: Path) -> None:
     assert "path=/health" in settings.log_file.read_text(encoding="utf-8")
 
 
+def test_frontend_and_assets_are_served(tmp_path: Path) -> None:
+    app, _ = make_app(tmp_path)
+
+    with TestClient(app) as client:
+        page = client.get("/")
+        script = client.get("/assets/app.js")
+
+    assert page.status_code == 200
+    assert "视诊匿名化" in page.text
+    assert "/api/v1/image/clean" in script.text
+    assert "/api/v1/video/clean" in script.text
+
+
 def test_application_lifecycle_loads_model_once(tmp_path: Path, monkeypatch) -> None:
     load_calls = 0
     close_calls = 0
@@ -110,6 +123,25 @@ def test_image_clean_endpoint_uses_service_layer(tmp_path: Path) -> None:
     assert payload["confidence"] == 0.98
     assert payload["bbox"] == [2, 3, 28, 18]
     assert (settings.output_dir / payload["output"]).is_file()
+
+    with TestClient(app) as client:
+        output_response = client.get(f"/api/v1/output/{payload['output']}")
+
+    assert output_response.status_code == 200
+    assert output_response.headers["content-type"] == "image/png"
+    assert output_response.content
+
+
+def test_output_endpoint_rejects_unknown_file(tmp_path: Path) -> None:
+    app, _ = make_app(tmp_path)
+
+    with TestClient(app) as client:
+        response = client.get("/api/v1/output/missing.png")
+        invalid = client.get("/api/v1/output/not-allowed.txt")
+
+    assert response.status_code == 404
+    assert response.json() == {"success": False, "error": "FILE_NOT_FOUND"}
+    assert invalid.status_code == 404
 
 
 def test_video_clean_endpoint_uses_service_layer(tmp_path: Path) -> None:

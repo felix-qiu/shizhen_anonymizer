@@ -6,10 +6,11 @@ train:
   epochs: 100
   imgsz: 640
   batch: 16
+  device: auto
 
 dataset:
   path: datasets/ultrasound_roi
-  yaml: training/dataset.yaml
+  yaml: datasets/ultrasound_roi/dataset.yaml
 
 output:
   dir: runs
