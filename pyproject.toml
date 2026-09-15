@@ -11,6 +11,7 @@ dependencies = [
   "pillow>=10",
   "python-multipart>=0.0.9",
   "pyyaml>=6",
+  "requests>=2.31",
   "torch>=2.2",
   "torchvision>=0.17",
   "ultralytics>=8.3",
@@ -28,7 +29,19 @@ dev = [
 package = false
 default-groups = ["dev"]
 
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
+]
+torchvision = [
+  { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
 [tool.ruff]
 line-length = 88
 target-version = "py311"
-

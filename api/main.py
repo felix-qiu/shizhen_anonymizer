@@ -12,11 +12,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from api.crop_api import router as crop_router
 from api.image_api import router as image_router
 from api.logging_config import configure_logging
 from api.output_api import router as output_router
 from api.schemas import ErrorResponse
 from api.video_api import router as video_router
+from service.dicom_service import DicomService
+from service.directory_service import DirectoryService
 from service.file_manager import FileManager
 from service.image_service import ImageService
 from service.server_config import ServerSettings, load_server_settings
@@ -65,6 +68,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        dicom_service: DicomService | None = None
         if load_model_on_startup:
             detector = model_manager.load()
             application.state.image_service = ImageService(
@@ -77,10 +81,23 @@ def create_app(
                 runtime_config.video.output_fps,
                 logger,
             )
+            dicom_service = DicomService(
+                server_settings.dicom_server_url,
+                server_settings.dicom_timeout_seconds,
+                logger,
+            )
+            application.state.directory_service = DirectoryService(
+                application.state.image_service,
+                application.state.video_service,
+                dicom_service,
+                logger,
+            )
             logger.info("model_loaded path=%s", server_settings.model_path)
         try:
             yield
         finally:
+            if dicom_service is not None:
+                dicom_service.close()
             model_manager.close()
             logger.info("service_stopped")
 
@@ -94,6 +111,7 @@ def create_app(
     application.state.logger = logger
     application.include_router(image_router)
     application.include_router(video_router)
+    application.include_router(crop_router)
     application.include_router(output_router)
     application.mount(
         "/assets",

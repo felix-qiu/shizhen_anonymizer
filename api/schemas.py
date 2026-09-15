@@ -1,6 +1,16 @@
-"""Public Phase 4 API response schemas."""
+"""Public API request and response schemas."""
 
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+
+class PathRequest(BaseModel):
+    path: str = Field(description="Absolute server-side directory path")
+    file_type: Literal["image", "video", "directory"] | None = Field(
+        default=None,
+        description="Optional compatibility field; ignored for directory processing",
+    )
 
 
 class ImageCleanResponse(BaseModel):
@@ -23,6 +33,16 @@ class VideoCleanResponse(BaseModel):
     success: bool = True
     frames: int
     output: str
+
+
+class DirectoryCropData(BaseModel):
+    directory_path: str
+
+
+class DirectoryCropResponse(BaseModel):
+    status: Literal["success"]
+    message: str
+    data: DirectoryCropData
 
 
 class ErrorResponse(BaseModel):

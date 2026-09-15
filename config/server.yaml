@@ -11,3 +11,7 @@ model:
 
 logging:
   file: logs/app.log
+
+dicom:
+  server_url: http://192.168.55.7:8180/dicom/convert
+  timeout_seconds: 300

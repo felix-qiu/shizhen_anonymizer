@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from api import main as api_main
 from api.main import create_app
+from service.directory_service import DirectoryService
 from service.image_service import ImageService
 from service.server_config import ServerSettings
 from service.video_service import VideoServiceResult
@@ -23,6 +24,8 @@ class FixedDetector(ROIDetector):
 
 class FakeVideoService:
     def process(self, input_path: Path, output_path: Path) -> VideoServiceResult:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"clean-video")
         return VideoServiceResult(
             frames=42,
             confidence=0.97,
@@ -30,6 +33,21 @@ class FakeVideoService:
             total_time_seconds=0.5,
             output_path=output_path,
         )
+
+
+class FakeDicomService:
+    def __init__(self) -> None:
+        self.calls: list[tuple[Path, Path, str | None]] = []
+
+    def convert(
+        self,
+        video_path: Path,
+        output_path: Path,
+        patient_id: str | None = None,
+    ) -> bool:
+        self.calls.append((video_path, output_path, patient_id))
+        output_path.write_bytes(b"dicom")
+        return True
 
 
 def make_app(tmp_path: Path):
@@ -233,6 +251,127 @@ def test_video_clean_endpoint_uses_service_layer(tmp_path: Path) -> None:
     assert response.json()["success"] is True
     assert response.json()["frames"] == 42
     assert response.json()["output"].endswith("_clean.mp4")
+
+
+def test_crop_directory_processes_supported_files_recursively(tmp_path: Path) -> None:
+    app, _ = make_app(tmp_path)
+    app.state.image_service = ImageService(
+        FixedDetector(ROIResult(0.98, [2, 3, 28, 18])), output_size=None
+    )
+    app.state.video_service = FakeVideoService()
+    app.state.directory_service = DirectoryService(
+        app.state.image_service, app.state.video_service, FakeDicomService()
+    )
+    source = tmp_path / "study"
+    nested = source / "nested"
+    nested.mkdir(parents=True)
+    (source / "first.png").write_bytes(png_bytes())
+    (nested / "second.jpg").write_bytes(png_bytes())
+    (source / "notes.txt").write_text("ignored", encoding="utf-8")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/crop/directory",
+            json={"path": str(source), "file_type": "directory"},
+        )
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload == {
+        "status": "success",
+        "message": "Directory processed successfully",
+        "data": {"directory_path": str(source)},
+    }
+    output_root = tmp_path / "cropped" / "study"
+    assert (output_root / "first.png").is_file()
+    assert (output_root / "nested" / "second.jpg").is_file()
+    assert not (output_root / "notes.txt").exists()
+
+
+def test_crop_directory_continues_after_file_failure(tmp_path: Path) -> None:
+    app, _ = make_app(tmp_path)
+    app.state.image_service = ImageService(
+        FixedDetector(ROIResult(0.98, [2, 3, 28, 18])), output_size=None
+    )
+    app.state.video_service = FakeVideoService()
+    app.state.directory_service = DirectoryService(
+        app.state.image_service, app.state.video_service, FakeDicomService()
+    )
+    source = tmp_path / "study"
+    source.mkdir()
+    (source / "broken.png").write_bytes(b"not-an-image")
+    (source / "valid.png").write_bytes(png_bytes())
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/crop/directory", json={"path": str(source)}
+        )
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload == {
+        "status": "success",
+        "message": "Directory processed successfully",
+        "data": {"directory_path": str(source)},
+    }
+    assert (tmp_path / "cropped" / "study" / "valid.png").is_file()
+
+
+def test_crop_directory_converts_cleaned_video_to_dicom(tmp_path: Path) -> None:
+    app, _ = make_app(tmp_path)
+    image_service = ImageService(FixedDetector(None), output_size=None)
+    video_service = FakeVideoService()
+    dicom_service = FakeDicomService()
+    app.state.directory_service = DirectoryService(
+        image_service, video_service, dicom_service
+    )
+    source = tmp_path / "study"
+    source.mkdir()
+    (source / "patient-001.mp4").write_bytes(b"source-video")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/crop/directory", json={"path": str(source)}
+        )
+
+    output_root = tmp_path / "cropped" / "study"
+    assert response.status_code == 200
+    assert (output_root / "patient-001.mp4").read_bytes() == b"clean-video"
+    assert (output_root / "patient-001.dcm").read_bytes() == b"dicom"
+    assert dicom_service.calls == [
+        (
+            output_root / "patient-001.mp4",
+            output_root / "patient-001.dcm",
+            "patient-001",
+        )
+    ]
+
+
+def test_crop_directory_validates_server_path(tmp_path: Path) -> None:
+    app, _ = make_app(tmp_path)
+    app.state.image_service = ImageService(FixedDetector(None), output_size=None)
+    app.state.video_service = FakeVideoService()
+    app.state.directory_service = DirectoryService(
+        app.state.image_service, app.state.video_service, FakeDicomService()
+    )
+    file_path = tmp_path / "image.png"
+    file_path.write_bytes(png_bytes())
+
+    with TestClient(app) as client:
+        empty = client.post("/api/v1/crop/directory", json={"path": ""})
+        missing = client.post(
+            "/api/v1/crop/directory", json={"path": str(tmp_path / "missing")}
+        )
+        not_directory = client.post(
+            "/api/v1/crop/directory", json={"path": str(file_path)}
+        )
+
+    assert empty.status_code == 400
+    assert empty.json() == {"detail": "Path is required"}
+    assert missing.status_code == 404
+    assert missing.json() == {"detail": "Directory not found"}
+    assert not_directory.status_code == 400
+    assert not_directory.json() == {"detail": "Path must be a directory"}
 
 
 def test_invalid_extension_has_unified_error(tmp_path: Path) -> None:

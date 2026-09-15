@@ -4,6 +4,7 @@ from typing import cast
 
 from fastapi import Request
 
+from service.directory_service import DirectoryService
 from service.file_manager import FileManager
 from service.image_service import ImageService
 from service.video_service import VideoService
@@ -27,3 +28,7 @@ def get_image_service(request: Request) -> ImageService:
 
 def get_video_service(request: Request) -> VideoService:
     return cast("VideoService", _state_value(request, "video_service"))
+
+
+def get_directory_service(request: Request) -> DirectoryService:
+    return cast("DirectoryService", _state_value(request, "directory_service"))

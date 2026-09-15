@@ -230,6 +230,21 @@ curl -X POST \
   http://localhost:8000/api/v1/video/clean
 ```
 
+服务器目录批量脱敏：
+
+```bash
+curl -X POST http://localhost:8000/api/v1/crop/directory \
+  -H "Content-Type: application/json" \
+  -d '{"path":"/absolute/path/to/study"}'
+```
+
+接口递归处理目录中的 JPG、JPEG、PNG、BMP、AVI 和 MP4 文件，跳过其他格式。
+输出写入输入目录同级的 `cropped/<输入目录名>/`，并保留原有子目录结构。
+图片和视频使用当前 YOLO 模型定位顶部边界；裁切后的视频通过
+`config/server.yaml` 配置的外部 HTTP 服务转换为同名 DICOM 文件。DICOM 转换
+失败时保留裁切视频并继续处理。请求参数和响应结构与原目录裁切接口兼容。
+该接口接收服务端本地路径，因此只适用于服务能够直接访问的目录。
+
 读取清洗结果（`output` 为清洗接口返回的文件名）：
 
 ```text
@@ -237,6 +252,57 @@ GET /api/v1/output/{output}
 ```
 
 上传文件使用时间戳和 UUID 生成内部文件名，保存在 `storage/input`；结果保存在 `storage/output`。统一 API 错误码包括 `FILE_NOT_FOUND`、`INVALID_FILE`、`MODEL_NOT_FOUND`、`ROI_NOT_FOUND` 和 `PROCESS_FAILED`。
+
+## Docker 部署
+
+生产镜像名称：
+
+```text
+192.168.20.32:8080/shizhen/shizhen-anonymizer:v0.0.8-prod
+```
+
+构建并启动：
+
+```bash
+mkdir -p data storage/input storage/output logs
+docker compose up -d --build
+```
+
+查看状态和日志：
+
+```bash
+docker compose ps
+docker compose logs -f shizhen-anonymizer
+```
+
+默认挂载关系：
+
+```text
+宿主机 ./data     -> 容器 /data
+宿主机 ./storage  -> 容器 /app/storage
+宿主机 ./logs     -> 容器 /app/logs
+```
+
+调用目录接口时传容器路径，例如宿主机文件位于 `./data/study`：
+
+```bash
+curl -X POST http://localhost:8000/api/v1/crop/directory \
+  -H "Content-Type: application/json" \
+  -d '{"path":"/data/study","file_type":"directory"}'
+```
+
+需要挂载其他宿主机目录时设置 `SHIZHEN_DATA_DIR`：
+
+```bash
+SHIZHEN_DATA_DIR=/absolute/host/data docker compose up -d
+```
+
+推送生产镜像：
+
+```bash
+docker compose build
+docker compose push shizhen-anonymizer
+```
 
 ## 数据集管理与模型评估
 

@@ -14,3 +14,5 @@ def test_server_config_resolves_project_paths() -> None:
     assert settings.output_dir == project_root / "storage/output"
     assert settings.model_path == project_root / "models/yolo11s_roi.pt"
     assert settings.log_file == project_root / "logs/app.log"
+    assert settings.dicom_server_url == "http://192.168.55.7:8180/dicom/convert"
+    assert settings.dicom_timeout_seconds == 300
