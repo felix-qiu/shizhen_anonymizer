@@ -1,4 +1,5 @@
 __pycache__/
+.DS_Store
 *.py[cod]
 *.cache
 .pytest_cache/
@@ -24,6 +25,7 @@ logs/*
 !logs/.gitkeep
 
 # Local training data is intentionally not committed.
+datasets/ultrasound_roi_v4/
 datasets/ultrasound_roi/images/train/*
 !datasets/ultrasound_roi/images/train/.gitkeep
 datasets/ultrasound_roi/images/val/*

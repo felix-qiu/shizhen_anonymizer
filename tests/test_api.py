@@ -73,8 +73,23 @@ def test_frontend_and_assets_are_served(tmp_path: Path) -> None:
 
     assert page.status_code == 200
     assert "视诊匿名化" in page.text
+    assert "批量脱敏工作台" in page.text
+    assert "导入数据文件夹" in page.text
+    assert "脱敏当前文件" in page.text
+    assert "全部脱敏" in page.text
+    assert "文件列表" in page.text
     assert "/api/v1/image/clean" in script.text
     assert "/api/v1/video/clean" in script.text
+    assert "webkitdirectory" in page.text
+    assert "processSelection" in script.text
+    assert "processCurrent" in script.text
+    assert "navigateSelection" in script.text
+    assert "A 上一个 · D 下一个" in page.text
+    assert "file-search" in page.text
+    assert "showItem" in script.text
+    assert "FILE_TYPES" in script.text
+    assert "lg:h-0" in page.text
+    assert "createDocumentFragment" in script.text
 
 
 def test_application_lifecycle_loads_model_once(tmp_path: Path, monkeypatch) -> None:
@@ -121,7 +136,7 @@ def test_image_clean_endpoint_uses_service_layer(tmp_path: Path) -> None:
     assert response.status_code == 200
     assert payload["success"] is True
     assert payload["confidence"] == 0.98
-    assert payload["bbox"] == [2, 3, 28, 18]
+    assert payload["bbox"] == [0, 3, 30, 20]
     assert (settings.output_dir / payload["output"]).is_file()
 
     with TestClient(app) as client:

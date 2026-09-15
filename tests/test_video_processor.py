@@ -64,6 +64,19 @@ def test_redetection_miss_reuses_last_valid_roi(tmp_path: Path) -> None:
     assert detector.calls == 2
 
 
+def test_video_processor_uses_only_detected_top_boundary(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.mp4"
+    output_path = tmp_path / "output.mp4"
+    create_test_video(input_path, frame_count=2)
+
+    result = VideoProcessor(
+        CountingDetector([ROIResult(0.9, [4, 3, 28, 20])]),
+        detect_interval=30,
+    ).process(input_path, output_path)
+
+    assert result.initial_roi.bbox == [0, 3, 32, 24]
+
+
 def test_first_frame_without_roi_fails(tmp_path: Path) -> None:
     input_path = tmp_path / "input.mp4"
     create_test_video(input_path, frame_count=2)

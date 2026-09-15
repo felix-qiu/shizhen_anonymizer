@@ -29,5 +29,5 @@ def test_pipeline_only_depends_on_detector_interface() -> None:
 
     result = cleaner.clean(np.zeros((10, 10, 3), dtype=np.uint8))
 
-    assert result.roi == roi
-    assert result.image.shape == (7, 7, 3)
+    assert result.roi == ROIResult(confidence=0.98, bbox=[0, 2, 10, 10])
+    assert result.image.shape == (8, 10, 3)

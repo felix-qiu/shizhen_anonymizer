@@ -65,6 +65,11 @@
   background: rgba(54, 214, 189, 0.09);
 }
 
+.file-list-item {
+  content-visibility: auto;
+  contain-intrinsic-size: 54px;
+}
+
 @keyframes scan {
   to {
     transform: translateY(290%);

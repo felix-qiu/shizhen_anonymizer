@@ -7,7 +7,7 @@ import numpy as np
 
 from src.detector.roi_detector import ROIDetector, ROIResult
 from src.errors import CleanerError, ErrorCode
-from src.processor.crop_engine import OutputSize, crop_image
+from src.processor.crop_engine import OutputSize, crop_image, top_boundary_bbox
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,5 +30,9 @@ class ImageCleaner:
         elapsed_ms = (perf_counter() - started) * 1000
         if roi is None:
             raise CleanerError(ErrorCode.ROI_NOT_FOUND)
-        cleaned = crop_image(image, roi.bbox, self.output_size)
-        return CleanResult(cleaned, roi, elapsed_ms)
+        effective_roi = ROIResult(
+            confidence=roi.confidence,
+            bbox=[round(value) for value in top_boundary_bbox(image, roi.bbox)],
+        )
+        cleaned = crop_image(image, effective_roi.bbox, self.output_size)
+        return CleanResult(cleaned, effective_roi, elapsed_ms)

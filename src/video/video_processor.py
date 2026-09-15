@@ -6,7 +6,7 @@ from time import perf_counter
 
 from src.detector.roi_detector import ROIDetector, ROIResult
 from src.errors import CleanerError, ErrorCode
-from src.processor.crop_engine import OutputSize, crop_image
+from src.processor.crop_engine import OutputSize, crop_image, top_boundary_bbox
 from src.video.frame_extractor import FrameExtractor
 from src.video.video_writer import VideoWriter
 
@@ -70,9 +70,17 @@ class VideoProcessor:
                                 perf_counter() - inference_started
                             ) * 1000
                             if detected_roi is not None:
-                                current_roi = detected_roi
+                                current_roi = ROIResult(
+                                    confidence=detected_roi.confidence,
+                                    bbox=[
+                                        round(value)
+                                        for value in top_boundary_bbox(
+                                            video_frame.image, detected_roi.bbox
+                                        )
+                                    ],
+                                )
                                 if initial_roi is None:
-                                    initial_roi = detected_roi
+                                    initial_roi = current_roi
                         if current_roi is None:
                             raise CleanerError(ErrorCode.ROI_NOT_FOUND)
 

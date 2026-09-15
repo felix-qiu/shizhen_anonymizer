@@ -1,69 +1,61 @@
 "use strict";
 
-const MODES = {
-  image: {
-    endpoint: "/api/v1/image/clean",
-    accept: ".jpg,.jpeg,.png,.bmp,image/jpeg,image/png,image/bmp",
-    extensions: ["jpg", "jpeg", "png", "bmp"],
-    title: "拖入超声图片",
-    hint: "或点击选择 JPG、PNG、BMP 文件",
-    action: "开始清洗图片",
-  },
-  video: {
-    endpoint: "/api/v1/video/clean",
-    accept: ".mp4,video/mp4",
-    extensions: ["mp4"],
-    title: "拖入超声视频",
-    hint: "或点击选择 MP4 文件",
-    action: "开始清洗视频",
-  },
+const FILE_TYPES = {
+  image: { endpoint: "/api/v1/image/clean", extensions: ["jpg", "jpeg", "png", "bmp"] },
+  video: { endpoint: "/api/v1/video/clean", extensions: ["mp4"] },
 };
 
 const ERROR_MESSAGES = {
   FILE_NOT_FOUND: "文件不存在或结果已被移除。",
   INVALID_FILE: "文件格式或内容无效，请重新选择。",
   MODEL_NOT_FOUND: "服务尚未加载 ROI 模型，请检查模型文件。",
-  ROI_NOT_FOUND: "没有检测到有效超声区域，请更换样本或调整模型。",
+  ROI_NOT_FOUND: "没有检测到有效超声区域，请检查该样本。",
   PROCESS_FAILED: "处理失败，请查看服务日志后重试。",
 };
 
 const elements = {
-  tabs: [...document.querySelectorAll(".mode-tab")],
   input: document.querySelector("#file-input"),
-  dropZone: document.querySelector("#drop-zone"),
-  dropTitle: document.querySelector("#drop-title"),
-  dropHint: document.querySelector("#drop-hint"),
-  fileCard: document.querySelector("#file-card"),
-  fileName: document.querySelector("#file-name"),
-  fileMeta: document.querySelector("#file-meta"),
-  removeFile: document.querySelector("#remove-file"),
-  submit: document.querySelector("#submit-button"),
-  cancel: document.querySelector("#cancel-button"),
+  selectionName: document.querySelector("#selection-name"),
+  selectionMeta: document.querySelector("#selection-meta"),
+  clear: document.querySelector("#clear-button"),
+  cleanCurrent: document.querySelector("#clean-current-button"),
+  clean: document.querySelector("#clean-button"),
+  stop: document.querySelector("#stop-button"),
   error: document.querySelector("#error-box"),
-  stage: document.querySelector("#preview-stage"),
-  state: document.querySelector("#preview-state"),
-  sourcePlaceholder: document.querySelector("#source-placeholder"),
-  sourceImage: document.querySelector("#source-image"),
-  sourceVideo: document.querySelector("#source-video"),
+  emptyView: document.querySelector("#empty-view"),
+  singleView: document.querySelector("#single-view"),
+  singleImage: document.querySelector("#single-image"),
+  singleVideo: document.querySelector("#single-video"),
+  compareView: document.querySelector("#compare-view"),
+  compareSourceImage: document.querySelector("#compare-source-image"),
+  compareSourceVideo: document.querySelector("#compare-source-video"),
+  compareResultImage: document.querySelector("#compare-result-image"),
+  compareResultVideo: document.querySelector("#compare-result-video"),
   resultPlaceholder: document.querySelector("#result-placeholder"),
   resultMessage: document.querySelector("#result-message"),
-  resultImage: document.querySelector("#result-image"),
-  resultVideo: document.querySelector("#result-video"),
-  download: document.querySelector("#download-button"),
-  metricEndpoint: document.querySelector("#metric-endpoint"),
-  metricPrimaryLabel: document.querySelector("#metric-primary-label"),
-  metricPrimary: document.querySelector("#metric-primary"),
-  metricSecondaryLabel: document.querySelector("#metric-secondary-label"),
-  metricSecondary: document.querySelector("#metric-secondary"),
-  metricTime: document.querySelector("#metric-time"),
+  currentName: document.querySelector("#current-name"),
+  currentPath: document.querySelector("#current-path"),
+  currentStatus: document.querySelector("#current-status"),
+  progress: document.querySelector("#metric-progress"),
+  confidence: document.querySelector("#metric-confidence"),
+  bbox: document.querySelector("#metric-bbox"),
+  time: document.querySelector("#metric-time"),
+  download: document.querySelector("#current-download"),
+  fileCounter: document.querySelector("#file-counter"),
+  fileSearch: document.querySelector("#file-search"),
+  listEmpty: document.querySelector("#list-empty"),
+  fileList: document.querySelector("#file-list"),
+  summary: document.querySelector("#batch-summary"),
   healthDot: document.querySelector("#health-dot"),
   healthText: document.querySelector("#health-text"),
 };
 
-let mode = "image";
-let selectedFile = null;
-let sourceUrl = null;
+let items = [];
+let selectedIndex = 0;
+let sourceUrls = [];
 let requestController = null;
+let stopRequested = false;
+let batchStartedAt = 0;
 
 function extensionOf(filename) {
   return filename.includes(".") ? filename.split(".").pop().toLowerCase() : "";
@@ -72,23 +64,38 @@ function extensionOf(filename) {
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 }
 
-function hideMedia(element) {
-  if (element.tagName === "VIDEO") {
-    element.pause();
-    element.removeAttribute("src");
-    element.load();
+function statusClasses(status) {
+  if (status === "COMPLETE") return "border-signal/40 text-signal";
+  if (status === "PROCESSING") return "border-amber/40 text-amber";
+  if (status === "FAILED" || status === "STOPPED") return "border-[#e56a5d]/40 text-[#e56a5d]";
+  return "border-white/10 text-mist/40";
+}
+
+function hideMedia(media) {
+  if (media.tagName === "VIDEO") {
+    media.pause();
+    media.removeAttribute("src");
+    media.load();
   } else {
-    element.removeAttribute("src");
+    media.removeAttribute("src");
   }
-  element.classList.add("hidden");
+  media.classList.add("hidden");
 }
 
-function clearError() {
-  elements.error.textContent = "";
-  elements.error.classList.add("hidden");
+function hideAllMedia() {
+  [elements.singleImage, elements.singleVideo, elements.compareSourceImage, elements.compareSourceVideo, elements.compareResultImage, elements.compareResultVideo].forEach(hideMedia);
+}
+
+function showMedia(imageElement, videoElement, url, kind) {
+  hideMedia(imageElement);
+  hideMedia(videoElement);
+  const media = kind === "video" ? videoElement : imageElement;
+  media.src = url;
+  media.classList.remove("hidden");
 }
 
 function showError(message) {
@@ -96,168 +103,275 @@ function showError(message) {
   elements.error.classList.remove("hidden");
 }
 
-function clearResult() {
-  hideMedia(elements.resultImage);
-  hideMedia(elements.resultVideo);
-  elements.resultPlaceholder.classList.remove("hidden");
-  elements.resultMessage.textContent = "清洗完成后，标准化 ROI 将显示在这里";
+function clearError() {
+  elements.error.textContent = "";
+  elements.error.classList.add("hidden");
+}
+
+function disableDownload() {
   elements.download.href = "#";
   elements.download.removeAttribute("download");
-  elements.download.classList.add("pointer-events-none", "border-white/10", "text-mist/30");
-  elements.download.classList.remove("border-signal/50", "text-signal", "hover:bg-signal/10");
-  elements.metricPrimary.textContent = "—";
-  elements.metricSecondary.textContent = "—";
-  elements.metricTime.textContent = "—";
-  elements.state.textContent = selectedFile ? "INPUT READY" : "WAITING";
-  elements.state.classList.remove("border-signal/30", "text-signal", "border-amber/30", "text-amber");
+  elements.download.classList.add("pointer-events-none", "text-mist/25");
+  elements.download.classList.remove("text-signal", "hover:underline");
+}
+
+function activateDownload(item) {
+  elements.download.href = item.resultUrl;
+  elements.download.download = item.payload.output;
+  elements.download.classList.remove("pointer-events-none", "text-mist/25");
+  elements.download.classList.add("text-signal", "hover:underline");
+}
+
+function revokeSourceUrls() {
+  sourceUrls.forEach((url) => URL.revokeObjectURL(url));
+  sourceUrls = [];
+}
+
+function updateListItem(item) {
+  const active = item.index === selectedIndex;
+  item.button.setAttribute("aria-selected", String(active));
+  item.button.classList.toggle("border-l-signal", active);
+  item.button.classList.toggle("border-l-transparent", !active);
+  item.button.classList.toggle("bg-signal/10", active);
+  item.statusNode.textContent = item.status;
+  item.statusNode.className = `item-status font-mono text-[8px] tracking-[0.08em] ${statusClasses(item.status).split(" ").at(-1)}`;
+}
+
+function showItem(index) {
+  const item = items[index];
+  if (!item) return;
+  if (!item.sourceUrl) {
+    item.sourceUrl = URL.createObjectURL(item.file);
+    sourceUrls.push(item.sourceUrl);
+  }
+  selectedIndex = index;
+  items.forEach(updateListItem);
+  elements.currentName.textContent = item.file.name;
+  elements.currentPath.textContent = item.file.webkitRelativePath || item.file.name;
+  elements.currentStatus.textContent = item.status;
+  elements.currentStatus.className = `shrink-0 border px-2 py-1 font-mono text-[9px] tracking-[0.12em] ${statusClasses(item.status)}`;
+  elements.emptyView.classList.add("hidden");
+  hideAllMedia();
+  disableDownload();
+
+  if (!item.started) {
+    elements.compareView.classList.add("hidden");
+    elements.compareView.classList.remove("grid");
+    elements.singleView.classList.remove("hidden");
+    elements.singleView.classList.add("flex");
+    showMedia(elements.singleImage, elements.singleVideo, item.sourceUrl, item.kind);
+  } else {
+    elements.singleView.classList.add("hidden");
+    elements.singleView.classList.remove("flex");
+    elements.compareView.classList.remove("hidden");
+    elements.compareView.classList.add("grid");
+    showMedia(elements.compareSourceImage, elements.compareSourceVideo, item.sourceUrl, item.kind);
+    if (item.resultUrl) {
+      showMedia(elements.compareResultImage, elements.compareResultVideo, item.resultUrl, item.kind);
+      elements.resultPlaceholder.classList.add("hidden");
+      activateDownload(item);
+    } else {
+      elements.resultPlaceholder.classList.remove("hidden");
+      elements.resultMessage.textContent = item.error || (item.status === "PROCESSING" ? "正在定位顶部患者信息边界…" : "未生成脱敏结果");
+    }
+  }
+
+  if (item.payload && item.kind === "image") {
+    elements.confidence.textContent = `${(item.payload.confidence * 100).toFixed(1)}%`;
+    elements.bbox.textContent = `[${item.payload.bbox.join(", ")}]`;
+  } else if (item.payload) {
+    elements.confidence.textContent = `${item.payload.frames} FRAMES`;
+    elements.bbox.textContent = "MP4 / MP4V";
+  } else {
+    elements.confidence.textContent = "—";
+    elements.bbox.textContent = "—";
+  }
+  elements.time.textContent = item.elapsed ? `${item.elapsed.toFixed(2)} s` : "—";
+}
+
+function navigateSelection(offset) {
+  if (!items.length) return;
+  const nextIndex = Math.max(0, Math.min(items.length - 1, selectedIndex + offset));
+  if (nextIndex === selectedIndex) return;
+  showItem(nextIndex);
+  items[nextIndex].button.scrollIntoView({ block: "nearest" });
+}
+
+function createListItem(file, index, kind) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.setAttribute("role", "option");
+  button.className = "file-list-item grid w-full grid-cols-[2.25rem_minmax(0,1fr)] gap-2 border-l-2 border-l-transparent px-3 py-2.5 text-left transition hover:bg-white/[0.04]";
+  button.innerHTML = `<span class="grid size-8 place-items-center border border-white/10 bg-black/20 font-mono text-[8px] text-mist/45">${kind === "video" ? "MP4" : String(index + 1).padStart(2, "0")}</span><span class="min-w-0"><span class="file-name block truncate text-[11px] text-paper/75"></span><span class="mt-1 flex items-center justify-between gap-2"><span class="font-mono text-[8px] text-mist/35">${formatBytes(file.size)}</span><span class="item-status font-mono text-[8px] tracking-[0.08em] text-mist/40">QUEUED</span></span></span>`;
+  button.querySelector(".file-name").textContent = file.name;
+  const item = { index, file, kind, sourceUrl: null, resultUrl: null, payload: null, status: "QUEUED", started: false, error: null, elapsed: 0, button, statusNode: button.querySelector(".item-status") };
+  button.addEventListener("click", () => showItem(index));
+  return item;
 }
 
 function clearSelection() {
-  selectedFile = null;
+  if (requestController) return;
+  revokeSourceUrls();
+  items = [];
+  selectedIndex = 0;
+  stopRequested = false;
   elements.input.value = "";
-  elements.fileCard.classList.add("hidden");
-  elements.fileCard.classList.remove("flex");
-  elements.submit.disabled = true;
-  elements.submit.textContent = "选择文件后开始";
-  if (sourceUrl) URL.revokeObjectURL(sourceUrl);
-  sourceUrl = null;
-  hideMedia(elements.sourceImage);
-  hideMedia(elements.sourceVideo);
-  elements.sourcePlaceholder.classList.remove("hidden");
-  clearResult();
+  elements.fileList.replaceChildren();
+  elements.fileList.classList.add("hidden");
+  elements.listEmpty.classList.remove("hidden");
+  elements.fileSearch.value = "";
+  elements.selectionName.textContent = "尚未导入数据";
+  elements.selectionMeta.textContent = "支持 JPG / JPEG / PNG / BMP / MP4";
+  elements.fileCounter.textContent = "0 FILES";
+  elements.summary.textContent = "READY · 等待导入";
+  elements.clean.disabled = true;
+  elements.clean.textContent = "全部脱敏";
+  elements.cleanCurrent.disabled = true;
+  elements.cleanCurrent.textContent = "脱敏当前文件";
+  elements.clear.disabled = true;
+  elements.emptyView.classList.remove("hidden");
+  elements.singleView.classList.add("hidden");
+  elements.singleView.classList.remove("flex");
+  elements.compareView.classList.add("hidden");
+  elements.compareView.classList.remove("grid");
+  hideAllMedia();
+  elements.currentName.textContent = "未选择文件";
+  elements.currentPath.textContent = "—";
+  elements.currentStatus.textContent = "WAITING";
+  elements.currentStatus.className = "shrink-0 border border-white/10 px-2 py-1 font-mono text-[9px] tracking-[0.12em] text-mist/40";
+  elements.progress.textContent = "0 / 0";
+  elements.confidence.textContent = "—";
+  elements.bbox.textContent = "—";
+  elements.time.textContent = "—";
+  disableDownload();
   clearError();
 }
 
-function selectMode(nextMode) {
-  if (!MODES[nextMode] || nextMode === mode) return;
-  mode = nextMode;
+function acceptFiles(fileList) {
+  const incoming = [...fileList];
+  if (!incoming.length) return;
   clearSelection();
-  const config = MODES[mode];
-  elements.input.accept = config.accept;
-  elements.dropTitle.textContent = config.title;
-  elements.dropHint.textContent = config.hint;
-  elements.metricEndpoint.textContent = config.endpoint;
-  elements.metricPrimaryLabel.textContent = mode === "image" ? "CONFIDENCE" : "PROCESSED";
-  elements.metricSecondaryLabel.textContent = mode === "image" ? "ROI BBOX" : "OUTPUT TYPE";
-
-  elements.tabs.forEach((tab) => {
-    const active = tab.dataset.mode === mode;
-    tab.setAttribute("aria-selected", String(active));
-    tab.classList.toggle("bg-paper", active);
-    tab.classList.toggle("text-ink", active);
-    tab.classList.toggle("font-semibold", active);
-    tab.classList.toggle("text-mist/65", !active);
-    tab.classList.toggle("font-medium", !active);
-  });
-}
-
-function renderSource(file) {
-  if (sourceUrl) URL.revokeObjectURL(sourceUrl);
-  sourceUrl = URL.createObjectURL(file);
-  elements.sourcePlaceholder.classList.add("hidden");
-  hideMedia(elements.sourceImage);
-  hideMedia(elements.sourceVideo);
-  const media = mode === "image" ? elements.sourceImage : elements.sourceVideo;
-  media.src = sourceUrl;
-  media.classList.remove("hidden");
-}
-
-function acceptFile(file) {
-  if (!file) return;
-  const detectedMode = extensionOf(file.name) === "mp4" ? "video" : "image";
-  if (detectedMode !== mode && MODES[detectedMode].extensions.includes(extensionOf(file.name))) {
-    selectMode(detectedMode);
-  }
-  if (!MODES[mode].extensions.includes(extensionOf(file.name))) {
-    showError(`当前仅支持 ${MODES[mode].extensions.join("、").toUpperCase()} 文件。`);
+  const supported = incoming
+    .map((file) => {
+      const extension = extensionOf(file.name);
+      const kind = FILE_TYPES.image.extensions.includes(extension) ? "image" : FILE_TYPES.video.extensions.includes(extension) ? "video" : null;
+      return { file, kind };
+    })
+    .filter((entry) => entry.kind);
+  if (!supported.length) {
+    showError("文件夹中没有找到支持的图片或 MP4 视频。");
     return;
   }
-
-  clearError();
-  clearResult();
-  selectedFile = file;
-  elements.fileName.textContent = file.name;
-  elements.fileMeta.textContent = `${formatBytes(file.size)} · ${mode === "image" ? "IMAGE" : "VIDEO"}`;
-  elements.fileCard.classList.remove("hidden");
-  elements.fileCard.classList.add("flex");
-  elements.submit.disabled = false;
-  elements.submit.textContent = MODES[mode].action;
-  elements.state.textContent = "INPUT READY";
-  renderSource(file);
+  const selected = supported.sort((a, b) => (a.file.webkitRelativePath || a.file.name).localeCompare(b.file.webkitRelativePath || b.file.name, "zh-CN", { numeric: true }));
+  elements.fileList.replaceChildren();
+  items = selected.map((entry, index) => createListItem(entry.file, index, entry.kind));
+  const listFragment = document.createDocumentFragment();
+  items.forEach((item) => listFragment.append(item.button));
+  elements.fileList.append(listFragment);
+  elements.listEmpty.classList.add("hidden");
+  elements.fileList.classList.remove("hidden");
+  const totalBytes = selected.reduce((total, entry) => total + entry.file.size, 0);
+  const folderName = selected[0].file.webkitRelativePath?.split("/")[0];
+  elements.selectionName.textContent = folderName || "已导入数据";
+  elements.selectionMeta.textContent = `${selected.length} ${selected.length > 1 ? "FILES" : "FILE"} · ${formatBytes(totalBytes)}${incoming.length > selected.length ? ` · 忽略 ${incoming.length - selected.length}` : ""}`;
+  elements.fileCounter.textContent = `${selected.length} ${selected.length > 1 ? "FILES" : "FILE"}`;
+  elements.summary.textContent = `READY · ${selected.length} 个文件等待处理`;
+  elements.clean.disabled = false;
+  elements.cleanCurrent.disabled = false;
+  elements.clear.disabled = false;
+  elements.progress.textContent = `0 / ${selected.length}`;
+  showItem(0);
 }
 
-function setProcessing(processing) {
-  elements.stage.classList.toggle("is-processing", processing);
-  elements.submit.disabled = processing;
-  elements.cancel.classList.toggle("hidden", !processing);
-  elements.state.textContent = processing ? "PROCESSING" : elements.state.textContent;
-  elements.state.classList.toggle("border-amber/30", processing);
-  elements.state.classList.toggle("text-amber", processing);
-  if (processing) {
-    elements.submit.textContent = mode === "image" ? "正在检测 ROI…" : "正在逐帧处理…";
-    elements.resultMessage.textContent = mode === "image" ? "模型正在定位有效超声区域" : "长视频处理需要一些时间，请保持页面开启";
-  }
-}
-
-function showResult(payload, elapsedSeconds) {
-  const outputUrl = `/api/v1/output/${encodeURIComponent(payload.output)}`;
-  elements.resultPlaceholder.classList.add("hidden");
-  const media = mode === "image" ? elements.resultImage : elements.resultVideo;
-  media.src = outputUrl;
-  media.classList.remove("hidden");
-  elements.download.href = outputUrl;
-  elements.download.download = payload.output;
-  elements.download.classList.remove("pointer-events-none", "border-white/10", "text-mist/30");
-  elements.download.classList.add("border-signal/50", "text-signal", "hover:bg-signal/10");
-  elements.state.textContent = "CLEAN COMPLETE";
-  elements.state.classList.remove("border-amber/30", "text-amber");
-  elements.state.classList.add("border-signal/30", "text-signal");
-  elements.metricTime.textContent = `${elapsedSeconds.toFixed(2)} s`;
-
-  if (mode === "image") {
-    elements.metricPrimary.textContent = `${(payload.confidence * 100).toFixed(1)}%`;
-    elements.metricSecondary.textContent = `[${payload.bbox.join(", ")}]`;
-  } else {
-    elements.metricPrimary.textContent = `${payload.frames} FRAMES`;
-    elements.metricSecondary.textContent = "MP4 / MP4V";
-  }
-}
-
-async function processFile() {
-  if (!selectedFile || requestController) return;
-  clearError();
-  clearResult();
-  setProcessing(true);
-  requestController = new AbortController();
-  const startedAt = performance.now();
+async function requestClean(file, signal) {
   const formData = new FormData();
-  formData.append("file", selectedFile, selectedFile.name);
+  formData.append("file", file.file, file.file.name);
+  const response = await fetch(FILE_TYPES[file.kind].endpoint, { method: "POST", body: formData, signal });
+  const payload = await response.json();
+  if (!response.ok || !payload.success) throw new Error(ERROR_MESSAGES[payload.error] || payload.error || "处理失败，请重试。");
+  return payload;
+}
 
+async function processItem(item) {
+  const startedAt = performance.now();
+  item.started = true;
+  item.status = "PROCESSING";
+  item.error = null;
+  item.resultUrl = null;
+  item.payload = null;
+  item.elapsed = 0;
+  updateListItem(item);
+  if (selectedIndex === item.index) showItem(item.index);
   try {
-    const response = await fetch(MODES[mode].endpoint, {
-      method: "POST",
-      body: formData,
-      signal: requestController.signal,
-    });
-    const payload = await response.json();
-    if (!response.ok || !payload.success) {
-      throw new Error(ERROR_MESSAGES[payload.error] || payload.error || "处理失败，请重试。");
-    }
-    showResult(payload, (performance.now() - startedAt) / 1000);
+    const payload = await requestClean(item, requestController.signal);
+    item.payload = payload;
+    item.resultUrl = `/api/v1/output/${encodeURIComponent(payload.output)}`;
+    item.status = "COMPLETE";
   } catch (error) {
-    if (error.name === "AbortError") {
-      showError("已停止等待。服务端可能仍在完成当前视频处理。 ");
-    } else {
-      showError(error.message || "无法连接清洗服务，请确认服务已经启动。");
-    }
-    elements.state.textContent = "FAILED";
-    elements.state.classList.remove("border-amber/30", "text-amber");
-  } finally {
-    requestController = null;
-    setProcessing(false);
-    elements.submit.disabled = !selectedFile;
-    elements.submit.textContent = selectedFile ? MODES[mode].action : "选择文件后开始";
+    item.status = error.name === "AbortError" ? "STOPPED" : "FAILED";
+    item.error = error.name === "AbortError" ? "处理已停止" : error.message || "无法连接清洗服务";
   }
+  item.elapsed = (performance.now() - startedAt) / 1000;
+  updateListItem(item);
+  if (selectedIndex === item.index) showItem(item.index);
+}
+
+function updateOverallProgress() {
+  const completed = items.filter((item) => item.status === "COMPLETE").length;
+  const failed = items.filter((item) => item.status === "FAILED").length;
+  const processed = completed + failed;
+  elements.progress.textContent = `${processed} / ${items.length}`;
+  elements.summary.textContent = `PROCESSING · ${completed} 完成 · ${failed} 失败 · ${items.length - processed} 等待`;
+  elements.clean.textContent = `处理中 ${processed} / ${items.length}`;
+}
+
+function setProcessingControls(processing) {
+  elements.clean.disabled = processing;
+  elements.cleanCurrent.disabled = processing;
+  elements.clear.disabled = processing;
+  elements.stop.classList.toggle("hidden", !processing);
+}
+
+async function processCurrent() {
+  if (!items.length || requestController) return;
+  clearError();
+  stopRequested = false;
+  requestController = new AbortController();
+  const item = items[selectedIndex];
+  setProcessingControls(true);
+  elements.cleanCurrent.textContent = "正在脱敏…";
+  await processItem(item);
+  updateOverallProgress();
+  const completed = items.filter((entry) => entry.status === "COMPLETE").length;
+  const failed = items.filter((entry) => entry.status === "FAILED").length;
+  elements.summary.textContent = item.status === "COMPLETE" ? `COMPLETE · 当前文件脱敏完成 · 共 ${completed} 完成` : `${item.status} · ${item.error || "当前文件未完成"} · 共 ${failed} 失败`;
+  requestController = null;
+  setProcessingControls(false);
+  elements.cleanCurrent.textContent = "重新脱敏当前文件";
+  elements.clean.textContent = "全部脱敏";
+}
+
+async function processSelection() {
+  if (!items.length || requestController) return;
+  clearError();
+  stopRequested = false;
+  requestController = new AbortController();
+  batchStartedAt = performance.now();
+  setProcessingControls(true);
+  for (const item of items) {
+    if (stopRequested) break;
+    await processItem(item);
+    updateOverallProgress();
+    if (item.status === "STOPPED") break;
+  }
+  const completed = items.filter((item) => item.status === "COMPLETE").length;
+  const failed = items.filter((item) => item.status === "FAILED").length;
+  const elapsed = (performance.now() - batchStartedAt) / 1000;
+  elements.summary.textContent = stopRequested ? `STOPPED · ${completed} 完成` : `COMPLETE · ${completed} 完成 · ${failed} 失败 · ${elapsed.toFixed(1)} 秒`;
+  requestController = null;
+  setProcessingControls(false);
+  elements.clean.textContent = "重新脱敏";
+  elements.cleanCurrent.textContent = "脱敏当前文件";
 }
 
 async function checkHealth() {
@@ -274,26 +388,30 @@ async function checkHealth() {
   }
 }
 
-elements.tabs.forEach((tab) => tab.addEventListener("click", () => selectMode(tab.dataset.mode)));
-elements.input.addEventListener("change", () => acceptFile(elements.input.files[0]));
-elements.removeFile.addEventListener("click", clearSelection);
-elements.submit.addEventListener("click", processFile);
-elements.cancel.addEventListener("click", () => requestController?.abort());
-
-["dragenter", "dragover"].forEach((eventName) => {
-  elements.dropZone.addEventListener(eventName, (event) => {
-    event.preventDefault();
-    elements.dropZone.classList.add("drop-active");
+elements.input.addEventListener("change", () => acceptFiles(elements.input.files));
+elements.clear.addEventListener("click", clearSelection);
+elements.cleanCurrent.addEventListener("click", processCurrent);
+elements.clean.addEventListener("click", processSelection);
+elements.stop.addEventListener("click", () => {
+  stopRequested = true;
+  requestController?.abort();
+});
+elements.fileSearch.addEventListener("input", () => {
+  const query = elements.fileSearch.value.trim().toLocaleLowerCase();
+  items.forEach((item) => {
+    const path = item.file.webkitRelativePath || item.file.name;
+    item.button.classList.toggle("hidden", Boolean(query) && !path.toLocaleLowerCase().includes(query));
   });
 });
-
-["dragleave", "drop"].forEach((eventName) => {
-  elements.dropZone.addEventListener(eventName, (event) => {
-    event.preventDefault();
-    elements.dropZone.classList.remove("drop-active");
-  });
+document.addEventListener("keydown", (event) => {
+  if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+  const target = event.target;
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable) return;
+  const key = event.key.toLowerCase();
+  if (key !== "a" && key !== "d") return;
+  event.preventDefault();
+  navigateSelection(key === "a" ? -1 : 1);
 });
 
-elements.dropZone.addEventListener("drop", (event) => acceptFile(event.dataTransfer.files[0]));
-
+clearSelection();
 checkHealth();

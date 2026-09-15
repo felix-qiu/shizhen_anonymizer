@@ -8,6 +8,25 @@ import numpy as np
 OutputSize = int | tuple[int, int]
 
 
+def top_boundary_bbox(
+    image: np.ndarray, bbox: Sequence[int | float]
+) -> list[int | float]:
+    """Keep only the detected top edge and preserve all other image edges.
+
+    The deployed cleaning policy removes only the top patient-information band.
+    A detector still returns a conventional four-sided box, but its left, right,
+    and bottom predictions must not remove diagnostic or measurement content.
+    """
+
+    if not isinstance(image, np.ndarray) or image.size == 0:
+        raise ValueError("image must be a non-empty numpy array")
+    if len(bbox) != 4:
+        raise ValueError("bbox must contain exactly four coordinates")
+
+    image_height, image_width = image.shape[:2]
+    return [0, bbox[1], image_width, image_height]
+
+
 def _normalize_output_size(output_size: OutputSize) -> tuple[int, int]:
     if isinstance(output_size, int):
         width = height = output_size

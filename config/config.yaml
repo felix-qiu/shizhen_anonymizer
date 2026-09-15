@@ -5,10 +5,10 @@ device:
   type: auto
 
 confidence:
-  threshold: 0.5
+  threshold: 0.7
 
 output:
-  size: 640
+  size: null
 
 video:
   detect_interval: 30
