@@ -10,6 +10,15 @@ class ImageCleanResponse(BaseModel):
     output: str
 
 
+class ImageCheckResponse(BaseModel):
+    success: bool = True
+    needs_anonymization: bool
+    confidence: float
+    bbox: list[int]
+    top_crop_pixels: int
+    top_crop_ratio: float
+
+
 class VideoCleanResponse(BaseModel):
     success: bool = True
     frames: int

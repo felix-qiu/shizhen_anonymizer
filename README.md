@@ -210,6 +210,18 @@ curl -X POST \
   http://localhost:8000/api/v1/image/clean
 ```
 
+判断图片是否需要脱敏（仅检测，不生成裁切图片）：
+
+```bash
+curl -X POST \
+  -F file=@test.png \
+  http://localhost:8000/api/v1/image/check
+```
+
+模型检测出的安全区域从图片顶部以下开始时，`needs_anonymization` 为
+`true`；`top_crop_pixels` 和 `top_crop_ratio` 表示建议移除的顶部高度。模型未
+检测到 ROI 时返回 `ROI_NOT_FOUND`，不会将无法判断的图片标记为无需脱敏。
+
 视频清洗：
 
 ```bash

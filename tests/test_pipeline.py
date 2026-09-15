@@ -31,3 +31,16 @@ def test_pipeline_only_depends_on_detector_interface() -> None:
 
     assert result.roi == ROIResult(confidence=0.98, bbox=[0, 2, 10, 10])
     assert result.image.shape == (8, 10, 3)
+
+
+def test_pipeline_can_inspect_without_cropping() -> None:
+    cleaner = ImageCleaner(
+        StubDetector(ROIResult(confidence=0.95, bbox=[2, 3, 8, 9])),
+        output_size=None,
+    )
+    image = np.zeros((10, 10, 3), dtype=np.uint8)
+
+    result = cleaner.inspect(image)
+
+    assert result.roi == ROIResult(confidence=0.95, bbox=[0, 3, 10, 10])
+    assert image.shape == (10, 10, 3)

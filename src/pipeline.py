@@ -17,6 +17,14 @@ class CleanResult:
     inference_time_ms: float
 
 
+@dataclass(frozen=True, slots=True)
+class ROIInspectionResult:
+    """Detected effective ROI without modifying the source image."""
+
+    roi: ROIResult
+    inference_time_ms: float
+
+
 class ImageCleaner:
     """Run ROI detection and standardized cropping using any detector backend."""
 
@@ -24,7 +32,9 @@ class ImageCleaner:
         self.detector = detector
         self.output_size = output_size
 
-    def clean(self, image: np.ndarray) -> CleanResult:
+    def inspect(self, image: np.ndarray) -> ROIInspectionResult:
+        """Detect and normalize the top-boundary ROI without cropping."""
+
         started = perf_counter()
         roi = self.detector.detect(image)
         elapsed_ms = (perf_counter() - started) * 1000
@@ -34,5 +44,9 @@ class ImageCleaner:
             confidence=roi.confidence,
             bbox=[round(value) for value in top_boundary_bbox(image, roi.bbox)],
         )
-        cleaned = crop_image(image, effective_roi.bbox, self.output_size)
-        return CleanResult(cleaned, effective_roi, elapsed_ms)
+        return ROIInspectionResult(effective_roi, elapsed_ms)
+
+    def clean(self, image: np.ndarray) -> CleanResult:
+        inspection = self.inspect(image)
+        cleaned = crop_image(image, inspection.roi.bbox, self.output_size)
+        return CleanResult(cleaned, inspection.roi, inspection.inference_time_ms)

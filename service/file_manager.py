@@ -49,3 +49,12 @@ class FileManager:
         path = Path(input_path)
         suffix = ".png" if media_kind == "image" else ".mp4"
         return self.output_dir / f"{path.stem}_clean{suffix}"
+
+    def remove_upload(self, input_path: str | Path) -> None:
+        """Remove a temporary upload while preventing deletion outside input_dir."""
+
+        path = Path(input_path).resolve()
+        input_root = self.input_dir.resolve()
+        if path.parent != input_root:
+            raise ValueError("input_path must be a direct child of input_dir")
+        path.unlink(missing_ok=True)

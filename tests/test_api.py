@@ -147,6 +147,66 @@ def test_image_clean_endpoint_uses_service_layer(tmp_path: Path) -> None:
     assert output_response.content
 
 
+def test_image_check_endpoint_reports_top_anonymization_need(tmp_path: Path) -> None:
+    app, settings = make_app(tmp_path)
+    app.state.image_service = ImageService(
+        FixedDetector(ROIResult(0.96, [4, 3, 26, 18])), output_size=None
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/image/check",
+            files={"file": ("test.png", png_bytes(), "image/png")},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "success": True,
+        "needs_anonymization": True,
+        "confidence": 0.96,
+        "bbox": [0, 3, 30, 20],
+        "top_crop_pixels": 3,
+        "top_crop_ratio": 0.15,
+    }
+    assert list(settings.input_dir.iterdir()) == []
+    assert list(settings.output_dir.iterdir()) == []
+
+
+def test_image_check_endpoint_reports_no_top_crop(tmp_path: Path) -> None:
+    app, _ = make_app(tmp_path)
+    app.state.image_service = ImageService(
+        FixedDetector(ROIResult(0.99, [0, 0, 30, 20])), output_size=None
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/image/check",
+            files={"file": ("test.png", png_bytes(), "image/png")},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["needs_anonymization"] is False
+    assert response.json()["top_crop_pixels"] == 0
+    assert response.json()["top_crop_ratio"] == 0.0
+
+
+def test_image_check_endpoint_does_not_treat_missing_roi_as_safe(
+    tmp_path: Path,
+) -> None:
+    app, settings = make_app(tmp_path)
+    app.state.image_service = ImageService(FixedDetector(None), output_size=None)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/image/check",
+            files={"file": ("test.png", png_bytes(), "image/png")},
+        )
+
+    assert response.status_code == 422
+    assert response.json() == {"success": False, "error": "ROI_NOT_FOUND"}
+    assert list(settings.input_dir.iterdir()) == []
+
+
 def test_output_endpoint_rejects_unknown_file(tmp_path: Path) -> None:
     app, _ = make_app(tmp_path)
 
