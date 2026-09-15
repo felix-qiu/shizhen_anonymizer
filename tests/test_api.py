@@ -72,8 +72,8 @@ def test_frontend_and_assets_are_served(tmp_path: Path) -> None:
         script = client.get("/assets/app.js")
 
     assert page.status_code == 200
-    assert "视诊匿名化" in page.text
-    assert "批量脱敏工作台" in page.text
+    assert "数据脱敏" in page.text
+    assert "数据脱敏工作台" in page.text
     assert "导入数据文件夹" in page.text
     assert "脱敏当前文件" in page.text
     assert "全部脱敏" in page.text

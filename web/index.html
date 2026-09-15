@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="超声图片批量脱敏工作台" />
-    <title>视诊 · Ultrasound ROI Cleaner</title>
+    <meta name="description" content="数据脱敏工作台" />
+    <title>数据脱敏 · Privacy Console</title>
     <link rel="stylesheet" href="/assets/app.css" />
     <script src="/assets/app.js" defer></script>
   </head>
@@ -12,11 +12,16 @@
     <div class="flex min-h-screen flex-col lg:h-screen lg:min-h-0 lg:overflow-hidden">
       <header class="flex min-h-16 items-center justify-between gap-5 border-b border-white/10 bg-[#081719] px-4 sm:px-6">
         <div class="flex min-w-0 items-center gap-5">
-          <a href="/" class="flex shrink-0 items-center gap-3" aria-label="视诊匿名化首页">
-            <span class="relative grid size-9 place-items-center border border-signal/60 bg-signal/10"><span class="size-3 rounded-full border-2 border-signal"></span><span class="absolute right-1.5 bottom-1.5 size-1 bg-amber"></span></span>
-            <span class="hidden sm:block"><strong class="block text-sm tracking-[0.2em]">视诊匿名化</strong><span class="font-mono text-[9px] tracking-[0.15em] text-mist/45">ROI CLEANING CONSOLE</span></span>
+          <a href="/" class="flex shrink-0 items-center gap-3" aria-label="数据脱敏首页">
+            <span class="grid size-9 place-items-center border border-signal/45 bg-signal/5 text-signal" aria-hidden="true">
+              <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3 19 6v5c0 4.7-2.8 8-7 10-4.2-2-7-5.3-7-10V6l7-3Z" />
+                <path d="M9 11.5h6M10.5 14.5h3" />
+              </svg>
+            </span>
+            <span class="hidden sm:block"><strong class="block text-sm tracking-[0.2em]">数据脱敏</strong><span class="font-mono text-[9px] tracking-[0.15em] text-mist/45">ULTRASOUND PRIVACY CONSOLE</span></span>
           </a>
-          <span class="hidden border-l border-white/10 pl-5 font-mono text-[10px] tracking-[0.16em] text-signal/70 md:inline">批量脱敏工作台</span>
+          <span class="hidden border-l border-white/10 pl-5 font-mono text-[10px] tracking-[0.16em] text-signal/70 md:inline">数据脱敏工作台</span>
         </div>
         <div class="flex shrink-0 items-center gap-3 font-mono text-[10px] text-mist/60"><span id="health-dot" class="size-2 rounded-full bg-amber"></span><span id="health-text" class="hidden sm:inline">正在检查服务</span><a href="/docs" class="hidden border-l border-white/10 pl-3 hover:text-signal md:inline">API 文档 ↗</a></div>
       </header>
