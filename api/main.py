@@ -23,6 +23,7 @@ from service.directory_service import DirectoryService
 from service.file_manager import FileManager
 from service.image_service import ImageService
 from service.server_config import ServerSettings, load_server_settings
+from service.video_preview_service import VideoPreviewService
 from service.video_service import VideoService
 from src.config import load_config
 from src.errors import CleanerError, ErrorCode
@@ -72,7 +73,10 @@ def create_app(
         if load_model_on_startup:
             detector = model_manager.load()
             application.state.image_service = ImageService(
-                detector, runtime_config.output_size, logger
+                detector,
+                runtime_config.output_size,
+                logger,
+                runtime_config.top_boundary_tolerance_pixels,
             )
             application.state.video_service = VideoService(
                 detector,
@@ -80,6 +84,7 @@ def create_app(
                 runtime_config.output_size,
                 runtime_config.video.output_fps,
                 logger,
+                runtime_config.top_boundary_tolerance_pixels,
             )
             dicom_service = DicomService(
                 server_settings.dicom_server_url,
@@ -108,6 +113,7 @@ def create_app(
     )
     application.state.file_manager = file_manager
     application.state.model_manager = model_manager
+    application.state.video_preview_service = VideoPreviewService(logger=logger)
     application.state.logger = logger
     application.include_router(image_router)
     application.include_router(video_router)
@@ -134,6 +140,8 @@ def create_app(
     ) -> Response:
         started = perf_counter()
         response = await call_next(request)
+        if request.url.path == "/" or request.url.path.startswith("/assets/"):
+            response.headers["Cache-Control"] = "no-cache"
         logger.info(
             "request method=%s path=%s status=%d duration_ms=%.2f",
             request.method,

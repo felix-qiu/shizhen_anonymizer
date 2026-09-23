@@ -42,4 +42,16 @@ def test_empty_bbox_is_rejected() -> None:
 def test_top_boundary_bbox_preserves_left_right_and_bottom_edges() -> None:
     image = np.zeros((20, 30, 3), dtype=np.uint8)
 
-    assert top_boundary_bbox(image, [2, 3, 28, 18]) == [0, 3, 30, 20]
+    assert top_boundary_bbox(image, [2, 6, 28, 18]) == [0, 6, 30, 20]
+
+
+def test_top_boundary_bbox_ignores_crop_within_configured_tolerance() -> None:
+    image = np.zeros((20, 30, 3), dtype=np.uint8)
+
+    assert top_boundary_bbox(image, [2, 5, 28, 18]) == [0, 0, 30, 20]
+    assert top_boundary_bbox(image, [2, 2, 28, 18], tolerance_pixels=1) == [
+        0,
+        2,
+        30,
+        20,
+    ]

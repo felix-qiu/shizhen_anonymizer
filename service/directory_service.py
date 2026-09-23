@@ -49,6 +49,14 @@ class DirectoryService:
         self._dicom_service = dicom_service
         self._logger = logger or logging.getLogger(__name__)
 
+    @staticmethod
+    def _remove_stale_outputs(output_path: Path, media_type: str) -> None:
+        """Remove results left by an earlier run when cropping is not needed."""
+
+        output_path.unlink(missing_ok=True)
+        if media_type == "video":
+            output_path.with_suffix(".dcm").unlink(missing_ok=True)
+
     def process(self, directory_path: str | Path) -> DirectoryProcessResult:
         source = Path(directory_path).expanduser().resolve()
         if not source.exists():
@@ -56,8 +64,18 @@ class DirectoryService:
         if not source.is_dir():
             raise NotADirectoryError(source)
 
-        output_root = source.parent / "cropped" / source.name
-        files = sorted(path for path in source.rglob("*") if path.is_file())
+        # The storage service passes a per-request working directory and expects
+        # anonymized files below its ``cropped`` child directory.
+        output_root = source / "cropped"
+        # Keep the directory contract stable even when no file needs cropping.
+        # Downstream callers can treat an empty directory as "no anonymization
+        # required" instead of failing because the output path does not exist.
+        output_root.mkdir(parents=True, exist_ok=True)
+        files = sorted(
+            path
+            for path in source.rglob("*")
+            if path.is_file() and output_root not in path.parents
+        )
         results: list[DirectoryFileResult] = []
         processed_files = 0
         failed_files = 0
@@ -88,8 +106,43 @@ class DirectoryService:
                 continue
 
             try:
+                inspection = processor.check(input_path)
+                if not inspection.needs_anonymization:
+                    self._remove_stale_outputs(output_path, media_type)
+                    skipped_files += 1
+                    self._logger.info(
+                        "directory_file_not_required input=%s top_crop_pixels=%d",
+                        input_path,
+                        inspection.top_crop_pixels,
+                    )
+                    results.append(
+                        DirectoryFileResult(
+                            input_path=input_path,
+                            output_path=None,
+                            media_type=media_type,
+                            status="not_required",
+                        )
+                    )
+                    continue
+
                 output_path.parent.mkdir(parents=True, exist_ok=True)
-                processor.process(input_path, output_path)
+                process_result = processor.process(input_path, output_path)
+                if not process_result.anonymized:
+                    self._remove_stale_outputs(output_path, media_type)
+                    skipped_files += 1
+                    self._logger.info(
+                        "directory_file_not_required_after_processing input=%s",
+                        input_path,
+                    )
+                    results.append(
+                        DirectoryFileResult(
+                            input_path=input_path,
+                            output_path=None,
+                            media_type=media_type,
+                            status="not_required",
+                        )
+                    )
+                    continue
                 if media_type == "video" and self._dicom_service is not None:
                     dicom_output = output_path.with_suffix(".dcm")
                     converted = self._dicom_service.convert(

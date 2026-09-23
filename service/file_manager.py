@@ -11,7 +11,7 @@ from src.errors import CleanerError, ErrorCode
 
 class FileManager:
     IMAGE_EXTENSIONS: ClassVar[set[str]] = {".jpg", ".jpeg", ".png", ".bmp"}
-    VIDEO_EXTENSIONS: ClassVar[set[str]] = {".mp4"}
+    VIDEO_EXTENSIONS: ClassVar[set[str]] = {".avi", ".mp4"}
 
     def __init__(self, input_dir: str | Path, output_dir: str | Path) -> None:
         self.input_dir = Path(input_dir)
@@ -49,6 +49,11 @@ class FileManager:
         path = Path(input_path)
         suffix = ".png" if media_kind == "image" else ".mp4"
         return self.output_dir / f"{path.stem}_clean{suffix}"
+
+    def preview_path(self, input_path: str | Path) -> Path:
+        """Return the browser-preview location for one temporary video upload."""
+
+        return self.output_dir / f"{Path(input_path).stem}_preview.mp4"
 
     def remove_upload(self, input_path: str | Path) -> None:
         """Remove a temporary upload while preventing deletion outside input_dir."""

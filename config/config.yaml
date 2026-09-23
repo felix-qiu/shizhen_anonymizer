@@ -10,6 +10,10 @@ confidence:
 output:
   size: null
 
+crop:
+  # 顶部裁切不超过该像素数时，视为无需脱敏。
+  top_boundary_tolerance_pixels: 2
+
 video:
   detect_interval: 30
   output_fps: same

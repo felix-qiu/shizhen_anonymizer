@@ -32,15 +32,21 @@ class VideoProcessor:
         detect_interval: int = 30,
         output_size: OutputSize | None = None,
         output_fps: float | None = None,
+        top_boundary_tolerance_pixels: int = 5,
     ) -> None:
         if detect_interval <= 0:
             raise ValueError("detect_interval must be a positive integer")
         if output_fps is not None and output_fps <= 0:
             raise ValueError("output_fps must be positive or None")
+        if top_boundary_tolerance_pixels < 0:
+            raise ValueError(
+                "top_boundary_tolerance_pixels must be non-negative"
+            )
         self.detector = detector
         self.detect_interval = detect_interval
         self.output_size = output_size
         self.output_fps = output_fps
+        self.top_boundary_tolerance_pixels = top_boundary_tolerance_pixels
 
     def process(
         self, input_video: str | Path, output_video: str | Path
@@ -75,7 +81,9 @@ class VideoProcessor:
                                     bbox=[
                                         round(value)
                                         for value in top_boundary_bbox(
-                                            video_frame.image, detected_roi.bbox
+                                            video_frame.image,
+                                            detected_roi.bbox,
+                                            self.top_boundary_tolerance_pixels,
                                         )
                                     ],
                                 )

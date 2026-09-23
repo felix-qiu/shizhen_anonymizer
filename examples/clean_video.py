@@ -47,6 +47,7 @@ def main() -> int:
             detect_interval=config.video.detect_interval,
             output_size=config.output_size,
             output_fps=config.video.output_fps,
+            top_boundary_tolerance_pixels=config.top_boundary_tolerance_pixels,
         )
         result = processor.process(args.input, args.output)
     except CleanerError as exc:

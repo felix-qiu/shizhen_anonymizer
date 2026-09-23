@@ -2,7 +2,7 @@
 
 const FILE_TYPES = {
   image: { endpoint: "/api/v1/image/clean", extensions: ["jpg", "jpeg", "png", "bmp"] },
-  video: { endpoint: "/api/v1/video/clean", extensions: ["mp4"] },
+  video: { endpoint: "/api/v1/video/clean", extensions: ["avi", "mp4"] },
 };
 
 const ERROR_MESSAGES = {
@@ -19,6 +19,7 @@ const elements = {
   selectionMeta: document.querySelector("#selection-meta"),
   clear: document.querySelector("#clear-button"),
   cleanCurrent: document.querySelector("#clean-current-button"),
+  recleanCurrent: document.querySelector("#reclean-current-button"),
   clean: document.querySelector("#clean-button"),
   stop: document.querySelector("#stop-button"),
   error: document.querySelector("#error-box"),
@@ -31,6 +32,9 @@ const elements = {
   compareSourceVideo: document.querySelector("#compare-source-video"),
   compareResultImage: document.querySelector("#compare-result-image"),
   compareResultVideo: document.querySelector("#compare-result-video"),
+  compareResultLabel: document.querySelector("#compare-result-label"),
+  singleAviNote: document.querySelector("#single-avi-note"),
+  compareAviNote: document.querySelector("#compare-avi-note"),
   resultPlaceholder: document.querySelector("#result-placeholder"),
   resultMessage: document.querySelector("#result-message"),
   currentName: document.querySelector("#current-name"),
@@ -56,6 +60,89 @@ let sourceUrls = [];
 let requestController = null;
 let stopRequested = false;
 let batchStartedAt = 0;
+let comparisonSyncFrame = null;
+
+function comparisonVideosReady() {
+  return !elements.compareSourceVideo.classList.contains("hidden")
+    && !elements.compareResultVideo.classList.contains("hidden")
+    && Boolean(elements.compareSourceVideo.currentSrc)
+    && Boolean(elements.compareResultVideo.currentSrc);
+}
+
+function syncComparisonTime(force = false) {
+  if (!comparisonVideosReady()) return;
+  const source = elements.compareSourceVideo;
+  const result = elements.compareResultVideo;
+  const target = Number.isFinite(result.duration)
+    ? Math.min(source.currentTime, result.duration)
+    : source.currentTime;
+  if (force || Math.abs(result.currentTime - target) > 0.04) {
+    result.currentTime = target;
+  }
+}
+
+function stopComparisonSync() {
+  if (comparisonSyncFrame !== null) {
+    cancelAnimationFrame(comparisonSyncFrame);
+    comparisonSyncFrame = null;
+  }
+}
+
+function startComparisonSync() {
+  stopComparisonSync();
+  const tick = () => {
+    if (!comparisonVideosReady() || elements.compareSourceVideo.paused) {
+      comparisonSyncFrame = null;
+      return;
+    }
+    syncComparisonTime();
+    comparisonSyncFrame = requestAnimationFrame(tick);
+  };
+  comparisonSyncFrame = requestAnimationFrame(tick);
+}
+
+async function playComparisonResult() {
+  if (!comparisonVideosReady()) return;
+  const source = elements.compareSourceVideo;
+  const result = elements.compareResultVideo;
+  result.playbackRate = source.playbackRate;
+  syncComparisonTime(true);
+  try {
+    await result.play();
+  } catch {
+    // The next source interaction will retry if autoplay policy interrupts sync.
+  }
+  startComparisonSync();
+}
+
+function setupComparisonVideoSync() {
+  const source = elements.compareSourceVideo;
+  const result = elements.compareResultVideo;
+  source.addEventListener("play", () => void playComparisonResult());
+  source.addEventListener("pause", () => {
+    stopComparisonSync();
+    if (!comparisonVideosReady()) return;
+    result.pause();
+    syncComparisonTime(true);
+  });
+  source.addEventListener("seeking", () => syncComparisonTime(true));
+  source.addEventListener("seeked", () => {
+    syncComparisonTime(true);
+    if (!source.paused) void playComparisonResult();
+  });
+  source.addEventListener("ratechange", () => {
+    result.playbackRate = source.playbackRate;
+  });
+  source.addEventListener("ended", () => {
+    stopComparisonSync();
+    result.pause();
+    syncComparisonTime(true);
+  });
+  result.addEventListener("loadedmetadata", () => {
+    syncComparisonTime(true);
+    if (!source.paused) void playComparisonResult();
+  });
+}
 
 function extensionOf(filename) {
   return filename.includes(".") ? filename.split(".").pop().toLowerCase() : "";
@@ -68,11 +155,33 @@ function formatBytes(bytes) {
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 }
 
-function statusClasses(status) {
-  if (status === "COMPLETE") return "border-signal/40 text-signal";
+function statusClasses(status, anonymized = null) {
+  if (status === "COMPLETE" && anonymized === false) {
+    return "border-[#7aa7c7]/40 bg-[#7aa7c7]/10 text-[#8ebbd7]";
+  }
+  if (status === "COMPLETE") return "border-signal/40 bg-signal/10 text-signal";
   if (status === "PROCESSING") return "border-amber/40 text-amber";
   if (status === "FAILED" || status === "STOPPED") return "border-[#e56a5d]/40 text-[#e56a5d]";
   return "border-white/10 text-mist/40";
+}
+
+function listStatusPresentation(item) {
+  if (item.status === "COMPLETE" && item.payload?.anonymized === true) {
+    return { label: "已脱敏", classes: "border-signal/40 bg-signal/10 text-signal" };
+  }
+  if (item.status === "COMPLETE") {
+    return { label: "无需脱敏", classes: "border-[#7aa7c7]/40 bg-[#7aa7c7]/10 text-[#8ebbd7]" };
+  }
+  if (item.status === "PROCESSING") {
+    return { label: "处理中", classes: "border-amber/40 bg-amber/10 text-amber" };
+  }
+  if (item.status === "FAILED") {
+    return { label: "失败", classes: "border-[#e56a5d]/40 bg-[#e56a5d]/10 text-[#e56a5d]" };
+  }
+  if (item.status === "STOPPED") {
+    return { label: "已停止", classes: "border-[#e56a5d]/40 text-[#e56a5d]" };
+  }
+  return { label: "待处理", classes: "border-white/10 text-mist/40" };
 }
 
 function hideMedia(media) {
@@ -133,8 +242,67 @@ function updateListItem(item) {
   item.button.classList.toggle("border-l-signal", active);
   item.button.classList.toggle("border-l-transparent", !active);
   item.button.classList.toggle("bg-signal/10", active);
-  item.statusNode.textContent = item.status;
-  item.statusNode.className = `item-status font-mono text-[8px] tracking-[0.08em] ${statusClasses(item.status).split(" ").at(-1)}`;
+  const presentation = listStatusPresentation(item);
+  item.statusNode.textContent = presentation.label;
+  item.statusNode.className = `item-status shrink-0 border px-1.5 py-0.5 font-mono text-[8px] tracking-[0.08em] ${presentation.classes}`;
+}
+
+function updateCurrentActions(item = items[selectedIndex]) {
+  if (requestController) return;
+  const isComplete = item?.status === "COMPLETE";
+  elements.cleanCurrent.disabled = !item || isComplete;
+  elements.recleanCurrent.disabled = !isComplete;
+}
+
+function isAvi(item) {
+  return item.kind === "video" && extensionOf(item.file.name) === "avi";
+}
+
+function updateAviPreviewNote(item) {
+  const visible = isAvi(item) && item.previewState !== "READY";
+  [elements.singleAviNote, elements.compareAviNote].forEach((note) => {
+    note.classList.toggle("hidden", !visible);
+    if (item.previewState === "PROCESSING") {
+      note.textContent = "正在生成可播放的 AVI 预览…";
+    } else if (item.previewState === "FAILED") {
+      note.textContent = "无法生成 AVI 原视频预览；仍可尝试脱敏并查看 MP4 结果。";
+    } else {
+      note.textContent = "正在准备 AVI 原视频预览…";
+    }
+  });
+}
+
+async function ensureAviPreview(item) {
+  if (!isAvi(item) || item.previewState !== "IDLE") return;
+  item.previewState = "PROCESSING";
+  updateAviPreviewNote(item);
+  const formData = new FormData();
+  formData.append("file", item.file, item.file.name);
+  try {
+    const response = await fetch("/api/v1/video/preview", {
+      method: "POST",
+      body: formData,
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) {
+      throw new Error(payload.error || "无法生成 AVI 预览");
+    }
+    item.previewUrl = `/api/v1/output/${encodeURIComponent(payload.output)}`;
+    item.previewState = "READY";
+  } catch (error) {
+    item.previewState = "FAILED";
+    item.previewError = error.message || "无法生成 AVI 预览";
+  }
+  if (selectedIndex === item.index) showItem(item.index);
+}
+
+function sourceUrlFor(item) {
+  return item.previewUrl || item.sourceUrl;
+}
+
+function displayStatus(item) {
+  if (item.status !== "COMPLETE" || !item.payload) return item.status;
+  return item.payload.anonymized ? "COMPLETE · 已脱敏" : "COMPLETE · 无需脱敏";
 }
 
 function showItem(index) {
@@ -148,8 +316,12 @@ function showItem(index) {
   items.forEach(updateListItem);
   elements.currentName.textContent = item.file.name;
   elements.currentPath.textContent = item.file.webkitRelativePath || item.file.name;
-  elements.currentStatus.textContent = item.status;
-  elements.currentStatus.className = `shrink-0 border px-2 py-1 font-mono text-[9px] tracking-[0.12em] ${statusClasses(item.status)}`;
+  elements.currentStatus.textContent = displayStatus(item);
+  elements.compareResultLabel.textContent = item.kind === "video"
+    ? "CLEAN ROI · 跟随左侧播放"
+    : "CLEAN ROI";
+  elements.currentStatus.className = `shrink-0 border px-2 py-1 font-mono text-[9px] tracking-[0.12em] ${statusClasses(item.status, item.payload?.anonymized)}`;
+  updateAviPreviewNote(item);
   elements.emptyView.classList.add("hidden");
   hideAllMedia();
   disableDownload();
@@ -159,13 +331,13 @@ function showItem(index) {
     elements.compareView.classList.remove("grid");
     elements.singleView.classList.remove("hidden");
     elements.singleView.classList.add("flex");
-    showMedia(elements.singleImage, elements.singleVideo, item.sourceUrl, item.kind);
+    showMedia(elements.singleImage, elements.singleVideo, sourceUrlFor(item), item.kind);
   } else {
     elements.singleView.classList.add("hidden");
     elements.singleView.classList.remove("flex");
     elements.compareView.classList.remove("hidden");
     elements.compareView.classList.add("grid");
-    showMedia(elements.compareSourceImage, elements.compareSourceVideo, item.sourceUrl, item.kind);
+    showMedia(elements.compareSourceImage, elements.compareSourceVideo, sourceUrlFor(item), item.kind);
     if (item.resultUrl) {
       showMedia(elements.compareResultImage, elements.compareResultVideo, item.resultUrl, item.kind);
       elements.resultPlaceholder.classList.add("hidden");
@@ -187,6 +359,8 @@ function showItem(index) {
     elements.bbox.textContent = "—";
   }
   elements.time.textContent = item.elapsed ? `${item.elapsed.toFixed(2)} s` : "—";
+  updateCurrentActions(item);
+  void ensureAviPreview(item);
 }
 
 function navigateSelection(offset) {
@@ -202,9 +376,9 @@ function createListItem(file, index, kind) {
   button.type = "button";
   button.setAttribute("role", "option");
   button.className = "file-list-item grid w-full grid-cols-[2.25rem_minmax(0,1fr)] gap-2 border-l-2 border-l-transparent px-3 py-2.5 text-left transition hover:bg-white/[0.04]";
-  button.innerHTML = `<span class="grid size-8 place-items-center border border-white/10 bg-black/20 font-mono text-[8px] text-mist/45">${kind === "video" ? "MP4" : String(index + 1).padStart(2, "0")}</span><span class="min-w-0"><span class="file-name block truncate text-[11px] text-paper/75"></span><span class="mt-1 flex items-center justify-between gap-2"><span class="font-mono text-[8px] text-mist/35">${formatBytes(file.size)}</span><span class="item-status font-mono text-[8px] tracking-[0.08em] text-mist/40">QUEUED</span></span></span>`;
+  button.innerHTML = `<span class="grid size-8 place-items-center border border-white/10 bg-black/20 font-mono text-[8px] text-mist/45">${String(index + 1).padStart(2, "0")}</span><span class="min-w-0"><span class="file-name block truncate text-[11px] text-paper/75"></span><span class="mt-1 flex items-center justify-between gap-2"><span class="font-mono text-[8px] text-mist/35">${formatBytes(file.size)}</span><span class="item-status shrink-0 border border-white/10 px-1.5 py-0.5 font-mono text-[8px] tracking-[0.08em] text-mist/40">待处理</span></span></span>`;
   button.querySelector(".file-name").textContent = file.name;
-  const item = { index, file, kind, sourceUrl: null, resultUrl: null, payload: null, status: "QUEUED", started: false, error: null, elapsed: 0, button, statusNode: button.querySelector(".item-status") };
+  const item = { index, file, kind, sourceUrl: null, previewUrl: null, previewState: "IDLE", previewError: null, resultUrl: null, payload: null, status: "QUEUED", started: false, error: null, elapsed: 0, button, statusNode: button.querySelector(".item-status") };
   button.addEventListener("click", () => showItem(index));
   return item;
 }
@@ -221,13 +395,14 @@ function clearSelection() {
   elements.listEmpty.classList.remove("hidden");
   elements.fileSearch.value = "";
   elements.selectionName.textContent = "尚未导入数据";
-  elements.selectionMeta.textContent = "支持 JPG / JPEG / PNG / BMP / MP4";
+  elements.selectionMeta.textContent = "支持 JPG / JPEG / PNG / BMP / AVI / MP4";
   elements.fileCounter.textContent = "0 FILES";
   elements.summary.textContent = "READY · 等待导入";
   elements.clean.disabled = true;
   elements.clean.textContent = "全部脱敏";
   elements.cleanCurrent.disabled = true;
   elements.cleanCurrent.textContent = "脱敏当前文件";
+  elements.recleanCurrent.disabled = true;
   elements.clear.disabled = true;
   elements.emptyView.classList.remove("hidden");
   elements.singleView.classList.add("hidden");
@@ -259,7 +434,7 @@ function acceptFiles(fileList) {
     })
     .filter((entry) => entry.kind);
   if (!supported.length) {
-    showError("文件夹中没有找到支持的图片或 MP4 视频。");
+    showError("文件夹中没有找到支持的图片、AVI 或 MP4 视频。");
     return;
   }
   const selected = supported.sort((a, b) => (a.file.webkitRelativePath || a.file.name).localeCompare(b.file.webkitRelativePath || b.file.name, "zh-CN", { numeric: true }));
@@ -278,6 +453,7 @@ function acceptFiles(fileList) {
   elements.summary.textContent = `READY · ${selected.length} 个文件等待处理`;
   elements.clean.disabled = false;
   elements.cleanCurrent.disabled = false;
+  elements.recleanCurrent.disabled = true;
   elements.clear.disabled = false;
   elements.progress.textContent = `0 / ${selected.length}`;
   showItem(0);
@@ -328,26 +504,30 @@ function updateOverallProgress() {
 function setProcessingControls(processing) {
   elements.clean.disabled = processing;
   elements.cleanCurrent.disabled = processing;
+  elements.recleanCurrent.disabled = processing;
   elements.clear.disabled = processing;
   elements.stop.classList.toggle("hidden", !processing);
 }
 
-async function processCurrent() {
+async function processCurrent(isRetry = false) {
   if (!items.length || requestController) return;
   clearError();
   stopRequested = false;
   requestController = new AbortController();
   const item = items[selectedIndex];
   setProcessingControls(true);
-  elements.cleanCurrent.textContent = "正在脱敏…";
+  const actionButton = isRetry ? elements.recleanCurrent : elements.cleanCurrent;
+  actionButton.textContent = "正在脱敏…";
   await processItem(item);
   updateOverallProgress();
   const completed = items.filter((entry) => entry.status === "COMPLETE").length;
   const failed = items.filter((entry) => entry.status === "FAILED").length;
-  elements.summary.textContent = item.status === "COMPLETE" ? `COMPLETE · 当前文件脱敏完成 · 共 ${completed} 完成` : `${item.status} · ${item.error || "当前文件未完成"} · 共 ${failed} 失败`;
+  elements.summary.textContent = item.status === "COMPLETE" ? `COMPLETE · 当前文件${item.payload.anonymized ? "已脱敏" : "无需脱敏"} · 共 ${completed} 完成` : `${item.status} · ${item.error || "当前文件未完成"} · 共 ${failed} 失败`;
   requestController = null;
   setProcessingControls(false);
-  elements.cleanCurrent.textContent = "重新脱敏当前文件";
+  elements.cleanCurrent.textContent = "脱敏当前文件";
+  elements.recleanCurrent.textContent = "重新脱敏当前文件";
+  updateCurrentActions(item);
   elements.clean.textContent = "全部脱敏";
 }
 
@@ -372,6 +552,8 @@ async function processSelection() {
   setProcessingControls(false);
   elements.clean.textContent = "重新脱敏";
   elements.cleanCurrent.textContent = "脱敏当前文件";
+  elements.recleanCurrent.textContent = "重新脱敏当前文件";
+  updateCurrentActions();
 }
 
 async function checkHealth() {
@@ -390,7 +572,8 @@ async function checkHealth() {
 
 elements.input.addEventListener("change", () => acceptFiles(elements.input.files));
 elements.clear.addEventListener("click", clearSelection);
-elements.cleanCurrent.addEventListener("click", processCurrent);
+elements.cleanCurrent.addEventListener("click", () => processCurrent(false));
+elements.recleanCurrent.addEventListener("click", () => processCurrent(true));
 elements.clean.addEventListener("click", processSelection);
 elements.stop.addEventListener("click", () => {
   stopRequested = true;
@@ -414,4 +597,5 @@ document.addEventListener("keydown", (event) => {
 });
 
 clearSelection();
+setupComparisonVideoSync();
 checkHealth();

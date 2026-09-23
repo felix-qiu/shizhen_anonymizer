@@ -39,7 +39,11 @@ def main() -> int:
             confidence_threshold=config.confidence_threshold,
             device=config.device,
         )
-        result = ImageCleaner(detector, config.output_size).clean(image)
+        result = ImageCleaner(
+            detector,
+            config.output_size,
+            config.top_boundary_tolerance_pixels,
+        ).clean(image)
         save_image(args.output, result.image)
     except CleanerError as exc:
         print(exc.code.value, file=sys.stderr)

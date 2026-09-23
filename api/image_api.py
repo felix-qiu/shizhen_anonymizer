@@ -68,6 +68,7 @@ def clean_image(
         file.file.close()
 
     return ImageCleanResponse(
+        anonymized=result.anonymized,
         confidence=result.confidence,
         bbox=result.bbox,
         output=result.output_path.name,

@@ -12,6 +12,7 @@ from src.processor.crop_engine import OutputSize
 
 @dataclass(frozen=True, slots=True)
 class ImageServiceResult:
+    anonymized: bool
     confidence: float
     bbox: list[int]
     inference_time_ms: float
@@ -34,8 +35,11 @@ class ImageService:
         detector: ROIDetector,
         output_size: OutputSize | None,
         logger: logging.Logger | None = None,
+        top_boundary_tolerance_pixels: int = 5,
     ) -> None:
-        self._cleaner = ImageCleaner(detector, output_size)
+        self._cleaner = ImageCleaner(
+            detector, output_size, top_boundary_tolerance_pixels
+        )
         self._logger = logger or logging.getLogger(__name__)
 
     def check(self, input_path: str | Path) -> ImageCheckResult:
@@ -79,6 +83,7 @@ class ImageService:
             destination.name,
         )
         return ImageServiceResult(
+            anonymized=result.roi.bbox[1] > 0,
             confidence=result.roi.confidence,
             bbox=result.roi.bbox,
             inference_time_ms=result.inference_time_ms,

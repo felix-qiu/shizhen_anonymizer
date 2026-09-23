@@ -19,6 +19,7 @@ class AppConfig:
     device: str
     confidence_threshold: float
     output_size: int | tuple[int, int] | None
+    top_boundary_tolerance_pixels: int
     video: VideoConfig
 
 
@@ -63,11 +64,20 @@ def load_config(config_path: str | Path, project_root: str | Path) -> AppConfig:
     threshold = float(raw["confidence"]["threshold"])
     if not 0.0 <= threshold <= 1.0:
         raise ValueError("confidence.threshold must be between 0 and 1")
+    crop = raw.get("crop") or {}
+    top_boundary_tolerance_pixels = int(
+        crop.get("top_boundary_tolerance_pixels", 5)
+    )
+    if top_boundary_tolerance_pixels < 0:
+        raise ValueError(
+            "crop.top_boundary_tolerance_pixels must be a non-negative integer"
+        )
 
     return AppConfig(
         model_path=model_path,
         device=str(raw["device"]["type"]),
         confidence_threshold=threshold,
         output_size=_parse_output_size(raw["output"].get("size")),
+        top_boundary_tolerance_pixels=top_boundary_tolerance_pixels,
         video=_parse_video_config(raw.get("video")),
     )

@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 import cv2
@@ -23,6 +24,26 @@ def test_video_writer_creates_readable_mp4(tmp_path: Path) -> None:
     assert capture.isOpened()
     assert round(capture.get(cv2.CAP_PROP_FRAME_COUNT)) == 4
     capture.release()
+
+    probe = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=codec_name,pix_fmt",
+            "-of",
+            "default=noprint_wrappers=1",
+            str(output_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert "codec_name=h264" in probe.stdout
+    assert "pix_fmt=yuv420p" in probe.stdout
 
 
 def test_video_writer_rejects_non_mp4_output(tmp_path: Path) -> None:

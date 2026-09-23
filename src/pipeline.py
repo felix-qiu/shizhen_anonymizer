@@ -28,9 +28,15 @@ class ROIInspectionResult:
 class ImageCleaner:
     """Run ROI detection and standardized cropping using any detector backend."""
 
-    def __init__(self, detector: ROIDetector, output_size: OutputSize | None) -> None:
+    def __init__(
+        self,
+        detector: ROIDetector,
+        output_size: OutputSize | None,
+        top_boundary_tolerance_pixels: int = 5,
+    ) -> None:
         self.detector = detector
         self.output_size = output_size
+        self.top_boundary_tolerance_pixels = top_boundary_tolerance_pixels
 
     def inspect(self, image: np.ndarray) -> ROIInspectionResult:
         """Detect and normalize the top-boundary ROI without cropping."""
@@ -42,7 +48,12 @@ class ImageCleaner:
             raise CleanerError(ErrorCode.ROI_NOT_FOUND)
         effective_roi = ROIResult(
             confidence=roi.confidence,
-            bbox=[round(value) for value in top_boundary_bbox(image, roi.bbox)],
+            bbox=[
+                round(value)
+                for value in top_boundary_bbox(
+                    image, roi.bbox, self.top_boundary_tolerance_pixels
+                )
+            ],
         )
         return ROIInspectionResult(effective_roi, elapsed_ms)
 

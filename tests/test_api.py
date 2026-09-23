@@ -9,7 +9,7 @@ from api.main import create_app
 from service.directory_service import DirectoryService
 from service.image_service import ImageService
 from service.server_config import ServerSettings
-from service.video_service import VideoServiceResult
+from service.video_service import VideoCheckResult, VideoServiceResult
 from src.detector.roi_detector import ROIDetector, ROIResult
 from src.errors import CleanerError, ErrorCode
 
@@ -23,6 +23,19 @@ class FixedDetector(ROIDetector):
 
 
 class FakeVideoService:
+    def __init__(self, needs_anonymization: bool = True) -> None:
+        self.needs_anonymization = needs_anonymization
+
+    def check(self, input_path: Path) -> VideoCheckResult:
+        top_crop_pixels = 3 if self.needs_anonymization else 0
+        return VideoCheckResult(
+            needs_anonymization=self.needs_anonymization,
+            confidence=0.97,
+            bbox=[0, top_crop_pixels, 30, 20],
+            top_crop_pixels=top_crop_pixels,
+            inference_time_ms=12.0,
+        )
+
     def process(self, input_path: Path, output_path: Path) -> VideoServiceResult:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_bytes(b"clean-video")
@@ -32,6 +45,7 @@ class FakeVideoService:
             inference_time_ms=12.0,
             total_time_seconds=0.5,
             output_path=output_path,
+            anonymized=self.needs_anonymization,
         )
 
 
@@ -105,6 +119,9 @@ def test_frontend_and_assets_are_served(tmp_path: Path) -> None:
     assert "A 上一个 · D 下一个" in page.text
     assert "file-search" in page.text
     assert "showItem" in script.text
+    assert "listStatusPresentation" in script.text
+    assert "已脱敏" in script.text
+    assert "无需脱敏" in script.text
     assert "FILE_TYPES" in script.text
     assert "lg:h-0" in page.text
     assert "createDocumentFragment" in script.text
@@ -141,7 +158,7 @@ def test_application_lifecycle_loads_model_once(tmp_path: Path, monkeypatch) -> 
 def test_image_clean_endpoint_uses_service_layer(tmp_path: Path) -> None:
     app, settings = make_app(tmp_path)
     app.state.image_service = ImageService(
-        FixedDetector(ROIResult(0.98, [2, 3, 28, 18])), output_size=32
+        FixedDetector(ROIResult(0.98, [2, 6, 28, 18])), output_size=32
     )
 
     with TestClient(app) as client:
@@ -154,7 +171,7 @@ def test_image_clean_endpoint_uses_service_layer(tmp_path: Path) -> None:
     assert response.status_code == 200
     assert payload["success"] is True
     assert payload["confidence"] == 0.98
-    assert payload["bbox"] == [0, 3, 30, 20]
+    assert payload["bbox"] == [0, 6, 30, 20]
     assert (settings.output_dir / payload["output"]).is_file()
 
     with TestClient(app) as client:
@@ -168,7 +185,7 @@ def test_image_clean_endpoint_uses_service_layer(tmp_path: Path) -> None:
 def test_image_check_endpoint_reports_top_anonymization_need(tmp_path: Path) -> None:
     app, settings = make_app(tmp_path)
     app.state.image_service = ImageService(
-        FixedDetector(ROIResult(0.96, [4, 3, 26, 18])), output_size=None
+        FixedDetector(ROIResult(0.96, [4, 6, 26, 18])), output_size=None
     )
 
     with TestClient(app) as client:
@@ -182,9 +199,9 @@ def test_image_check_endpoint_reports_top_anonymization_need(tmp_path: Path) -> 
         "success": True,
         "needs_anonymization": True,
         "confidence": 0.96,
-        "bbox": [0, 3, 30, 20],
-        "top_crop_pixels": 3,
-        "top_crop_ratio": 0.15,
+        "bbox": [0, 6, 30, 20],
+        "top_crop_pixels": 6,
+        "top_crop_ratio": 0.3,
     }
     assert list(settings.input_dir.iterdir()) == []
     assert list(settings.output_dir.iterdir()) == []
@@ -256,7 +273,7 @@ def test_video_clean_endpoint_uses_service_layer(tmp_path: Path) -> None:
 def test_crop_directory_processes_supported_files_recursively(tmp_path: Path) -> None:
     app, _ = make_app(tmp_path)
     app.state.image_service = ImageService(
-        FixedDetector(ROIResult(0.98, [2, 3, 28, 18])), output_size=None
+        FixedDetector(ROIResult(0.98, [2, 6, 28, 18])), output_size=None
     )
     app.state.video_service = FakeVideoService()
     app.state.directory_service = DirectoryService(
@@ -282,7 +299,7 @@ def test_crop_directory_processes_supported_files_recursively(tmp_path: Path) ->
         "message": "Directory processed successfully",
         "data": {"directory_path": str(source)},
     }
-    output_root = tmp_path / "cropped" / "study"
+    output_root = source / "cropped"
     assert (output_root / "first.png").is_file()
     assert (output_root / "nested" / "second.jpg").is_file()
     assert not (output_root / "notes.txt").exists()
@@ -291,7 +308,7 @@ def test_crop_directory_processes_supported_files_recursively(tmp_path: Path) ->
 def test_crop_directory_continues_after_file_failure(tmp_path: Path) -> None:
     app, _ = make_app(tmp_path)
     app.state.image_service = ImageService(
-        FixedDetector(ROIResult(0.98, [2, 3, 28, 18])), output_size=None
+        FixedDetector(ROIResult(0.98, [2, 6, 28, 18])), output_size=None
     )
     app.state.video_service = FakeVideoService()
     app.state.directory_service = DirectoryService(
@@ -314,7 +331,7 @@ def test_crop_directory_continues_after_file_failure(tmp_path: Path) -> None:
         "message": "Directory processed successfully",
         "data": {"directory_path": str(source)},
     }
-    assert (tmp_path / "cropped" / "study" / "valid.png").is_file()
+    assert (source / "cropped" / "valid.png").is_file()
 
 
 def test_crop_directory_converts_cleaned_video_to_dicom(tmp_path: Path) -> None:
@@ -334,7 +351,7 @@ def test_crop_directory_converts_cleaned_video_to_dicom(tmp_path: Path) -> None:
             "/api/v1/crop/directory", json={"path": str(source)}
         )
 
-    output_root = tmp_path / "cropped" / "study"
+    output_root = source / "cropped"
     assert response.status_code == 200
     assert (output_root / "patient-001.mp4").read_bytes() == b"clean-video"
     assert (output_root / "patient-001.dcm").read_bytes() == b"dicom"
@@ -345,6 +362,43 @@ def test_crop_directory_converts_cleaned_video_to_dicom(tmp_path: Path) -> None:
             "patient-001",
         )
     ]
+
+
+def test_crop_directory_omits_media_that_does_not_need_anonymization(
+    tmp_path: Path,
+) -> None:
+    app, _ = make_app(tmp_path)
+    image_service = ImageService(
+        FixedDetector(ROIResult(0.98, [0, 0, 30, 20])), output_size=None
+    )
+    video_service = FakeVideoService(needs_anonymization=False)
+    dicom_service = FakeDicomService()
+    app.state.directory_service = DirectoryService(
+        image_service, video_service, dicom_service
+    )
+    source = tmp_path / "study"
+    source.mkdir()
+    (source / "image.png").write_bytes(png_bytes())
+    (source / "video.avi").write_bytes(b"source-video")
+
+    output_root = source / "cropped"
+    output_root.mkdir(parents=True)
+    (output_root / "image.png").write_bytes(b"stale-image")
+    (output_root / "video.mp4").write_bytes(b"stale-video")
+    (output_root / "video.dcm").write_bytes(b"stale-dicom")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/crop/directory", json={"path": str(source)}
+        )
+
+    assert response.status_code == 200
+    assert output_root.is_dir()
+    assert not (output_root / "image.png").exists()
+    assert not (output_root / "video.mp4").exists()
+    assert not (output_root / "video.dcm").exists()
+    assert not (output_root / "cropped").exists()
+    assert dicom_service.calls == []
 
 
 def test_crop_directory_validates_server_path(tmp_path: Path) -> None:

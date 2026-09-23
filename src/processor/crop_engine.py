@@ -6,10 +6,13 @@ import cv2
 import numpy as np
 
 OutputSize = int | tuple[int, int]
+DEFAULT_TOP_BOUNDARY_TOLERANCE_PIXELS = 5
 
 
 def top_boundary_bbox(
-    image: np.ndarray, bbox: Sequence[int | float]
+    image: np.ndarray,
+    bbox: Sequence[int | float],
+    tolerance_pixels: int = DEFAULT_TOP_BOUNDARY_TOLERANCE_PIXELS,
 ) -> list[int | float]:
     """Keep only the detected top edge and preserve all other image edges.
 
@@ -22,9 +25,15 @@ def top_boundary_bbox(
         raise ValueError("image must be a non-empty numpy array")
     if len(bbox) != 4:
         raise ValueError("bbox must contain exactly four coordinates")
+    if tolerance_pixels < 0:
+        raise ValueError("tolerance_pixels must be non-negative")
 
     image_height, image_width = image.shape[:2]
-    return [0, bbox[1], image_width, image_height]
+    detected_top = bbox[1]
+    effective_top: int | float = (
+        0 if float(detected_top) <= tolerance_pixels else detected_top
+    )
+    return [0, effective_top, image_width, image_height]
 
 
 def _normalize_output_size(output_size: OutputSize) -> tuple[int, int]:

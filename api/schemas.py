@@ -15,6 +15,9 @@ class PathRequest(BaseModel):
 
 class ImageCleanResponse(BaseModel):
     success: bool = True
+    anonymized: bool = Field(
+        description="Whether this result removed a top information region"
+    )
     confidence: float
     bbox: list[int]
     output: str
@@ -31,7 +34,15 @@ class ImageCheckResponse(BaseModel):
 
 class VideoCleanResponse(BaseModel):
     success: bool = True
+    anonymized: bool = Field(
+        description="Whether this result removed a top information region"
+    )
     frames: int
+    output: str
+
+
+class VideoPreviewResponse(BaseModel):
+    success: bool = True
     output: str
 
 
