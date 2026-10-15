@@ -85,6 +85,7 @@ def create_app(
                 runtime_config.video.output_fps,
                 logger,
                 runtime_config.top_boundary_tolerance_pixels,
+                runtime_config.video.check_interval,
             )
             dicom_service = DicomService(
                 server_settings.dicom_server_url,

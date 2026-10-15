@@ -11,7 +11,7 @@ from src.errors import CleanerError, ErrorCode
 
 class FileManager:
     IMAGE_EXTENSIONS: ClassVar[set[str]] = {".jpg", ".jpeg", ".png", ".bmp"}
-    VIDEO_EXTENSIONS: ClassVar[set[str]] = {".avi", ".mp4"}
+    VIDEO_EXTENSIONS: ClassVar[set[str]] = {".avi", ".mp4", ".wmv"}
 
     def __init__(self, input_dir: str | Path, output_dir: str | Path) -> None:
         self.input_dir = Path(input_dir)

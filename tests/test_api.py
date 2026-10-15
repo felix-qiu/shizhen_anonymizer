@@ -34,6 +34,9 @@ class FakeVideoService:
             bbox=[0, top_crop_pixels, 30, 20],
             top_crop_pixels=top_crop_pixels,
             inference_time_ms=12.0,
+            sampled_frames=4,
+            detected_frames=4,
+            failed_frames=0,
         )
 
     def process(self, input_path: Path, output_path: Path) -> VideoServiceResult:
@@ -270,6 +273,75 @@ def test_video_clean_endpoint_uses_service_layer(tmp_path: Path) -> None:
     assert response.json()["output"].endswith("_clean.mp4")
 
 
+def test_video_clean_endpoint_accepts_wmv(tmp_path: Path) -> None:
+    app, _ = make_app(tmp_path)
+    app.state.video_service = FakeVideoService()
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/video/clean",
+            files={"file": ("test.wmv", b"fake-video", "video/x-ms-wmv")},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert response.json()["output"].endswith("_clean.mp4")
+
+
+def test_video_check_endpoint_uses_service_layer(tmp_path: Path) -> None:
+    app, settings = make_app(tmp_path)
+    app.state.image_service = ImageService(
+        FixedDetector(ROIResult(0.98, [0, 3, 30, 20])), output_size=None
+    )
+    app.state.video_service = FakeVideoService()
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/video/check",
+            files={"file": ("test.avi", b"fake-video", "video/x-msvideo")},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "success": True,
+        "needs_anonymization": True,
+        "confidence": 0.97,
+        "bbox": [0, 3, 30, 20],
+        "top_crop_pixels": 3,
+        "sampled_frames": 4,
+        "detected_frames": 4,
+        "failed_frames": 0,
+    }
+    assert list(settings.input_dir.iterdir()) == []
+
+
+def test_video_check_endpoint_keeps_image_check_behavior(tmp_path: Path) -> None:
+    app, settings = make_app(tmp_path)
+    app.state.image_service = ImageService(
+        FixedDetector(ROIResult(0.98, [0, 3, 30, 20])),
+        output_size=None,
+        top_boundary_tolerance_pixels=0,
+    )
+    app.state.video_service = FakeVideoService()
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/video/check",
+            files={"file": ("test.png", png_bytes(), "image/png")},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "success": True,
+        "needs_anonymization": True,
+        "confidence": 0.98,
+        "bbox": [0, 3, 30, 20],
+        "top_crop_pixels": 3,
+        "top_crop_ratio": 0.15,
+    }
+    assert list(settings.input_dir.iterdir()) == []
+
+
 def test_crop_directory_processes_supported_files_recursively(tmp_path: Path) -> None:
     app, _ = make_app(tmp_path)
     app.state.image_service = ImageService(
@@ -320,9 +392,7 @@ def test_crop_directory_continues_after_file_failure(tmp_path: Path) -> None:
     (source / "valid.png").write_bytes(png_bytes())
 
     with TestClient(app) as client:
-        response = client.post(
-            "/api/v1/crop/directory", json={"path": str(source)}
-        )
+        response = client.post("/api/v1/crop/directory", json={"path": str(source)})
 
     payload = response.json()
     assert response.status_code == 200
@@ -347,9 +417,7 @@ def test_crop_directory_converts_cleaned_video_to_dicom(tmp_path: Path) -> None:
     (source / "patient-001.mp4").write_bytes(b"source-video")
 
     with TestClient(app) as client:
-        response = client.post(
-            "/api/v1/crop/directory", json={"path": str(source)}
-        )
+        response = client.post("/api/v1/crop/directory", json={"path": str(source)})
 
     output_root = source / "cropped"
     assert response.status_code == 200
@@ -362,6 +430,27 @@ def test_crop_directory_converts_cleaned_video_to_dicom(tmp_path: Path) -> None:
             "patient-001",
         )
     ]
+
+
+def test_crop_directory_processes_wmv_as_mp4(tmp_path: Path) -> None:
+    app, _ = make_app(tmp_path)
+    image_service = ImageService(FixedDetector(None), output_size=None)
+    video_service = FakeVideoService()
+    dicom_service = FakeDicomService()
+    app.state.directory_service = DirectoryService(
+        image_service, video_service, dicom_service
+    )
+    source = tmp_path / "study"
+    source.mkdir()
+    (source / "patient-001.wmv").write_bytes(b"source-video")
+
+    with TestClient(app) as client:
+        response = client.post("/api/v1/crop/directory", json={"path": str(source)})
+
+    output_root = source / "cropped"
+    assert response.status_code == 200
+    assert (output_root / "patient-001.mp4").read_bytes() == b"clean-video"
+    assert (output_root / "patient-001.dcm").read_bytes() == b"dicom"
 
 
 def test_crop_directory_omits_media_that_does_not_need_anonymization(
@@ -388,9 +477,7 @@ def test_crop_directory_omits_media_that_does_not_need_anonymization(
     (output_root / "video.dcm").write_bytes(b"stale-dicom")
 
     with TestClient(app) as client:
-        response = client.post(
-            "/api/v1/crop/directory", json={"path": str(source)}
-        )
+        response = client.post("/api/v1/crop/directory", json={"path": str(source)})
 
     assert response.status_code == 200
     assert output_root.is_dir()

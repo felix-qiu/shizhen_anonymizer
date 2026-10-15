@@ -15,6 +15,7 @@ from pathlib import Path
 
 IMAGE_SUFFIXES = {".bmp", ".jpeg", ".jpg", ".png"}
 SPLIT_RATIOS = {"train": 0.7, "val": 0.2, "test": 0.1}
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,8 +185,13 @@ def prepare_dataset(sources: list[Path], output: Path, seed: int = 42) -> dict[s
                         "top": sample.top,
                     }
                 )
+        resolved_output = output.resolve()
+        try:
+            dataset_root = resolved_output.relative_to(PROJECT_ROOT).as_posix()
+        except ValueError:
+            dataset_root = resolved_output.as_posix()
         (output / "dataset.yaml").write_text(
-            "path: datasets/ultrasound_roi_v4\n"
+            f"path: {json.dumps(dataset_root)}\n"
             "train: images/train\n"
             "val: images/val\n"
             "test: images/test\n"

@@ -28,8 +28,8 @@
 
       <section class="flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-panel px-4 py-2 sm:px-6">
         <div class="flex min-w-0 items-center gap-3">
-          <label for="file-input" class="cursor-pointer border border-signal/50 bg-signal/10 px-4 py-2.5 text-xs font-semibold text-signal transition hover:bg-signal/20"><span>导入数据文件夹</span><input id="file-input" type="file" class="sr-only" accept=".jpg,.jpeg,.png,.bmp,.avi,.mp4,image/jpeg,image/png,image/bmp,video/x-msvideo,video/mp4" multiple webkitdirectory directory /></label>
-          <div class="min-w-0"><p id="selection-name" class="truncate text-xs text-paper/75">尚未导入数据</p><p id="selection-meta" class="mt-1 font-mono text-[9px] tracking-[0.08em] text-mist/35">支持 JPG / JPEG / PNG / BMP / AVI / MP4</p></div>
+          <label for="file-input" class="cursor-pointer border border-signal/50 bg-signal/10 px-4 py-2.5 text-xs font-semibold text-signal transition hover:bg-signal/20"><span>导入数据文件夹</span><input id="file-input" type="file" class="sr-only" accept=".jpg,.jpeg,.png,.bmp,.avi,.mp4,.wmv,image/jpeg,image/png,image/bmp,video/x-msvideo,video/mp4,video/x-ms-wmv" multiple webkitdirectory directory /></label>
+          <div class="min-w-0"><p id="selection-name" class="truncate text-xs text-paper/75">尚未导入数据</p><p id="selection-meta" class="mt-1 font-mono text-[9px] tracking-[0.08em] text-mist/35">支持 JPG / JPEG / PNG / BMP / AVI / MP4 / WMV</p></div>
         </div>
         <div class="flex items-center gap-2">
           <button id="clear-button" type="button" disabled class="border border-white/10 px-3 py-2.5 text-xs text-mist/55 hover:border-white/25 hover:text-paper disabled:cursor-not-allowed disabled:opacity-25">清空</button>
@@ -50,16 +50,16 @@
           </div>
 
           <div id="empty-view" class="relative z-10 grid min-h-0 flex-1 place-items-center p-8 text-center">
-            <div><label for="file-input" class="mx-auto grid size-24 cursor-pointer place-items-center border border-dashed border-signal/30 bg-signal/5 font-mono text-2xl text-signal/50 transition hover:border-signal hover:bg-signal/10">＋</label><p class="mt-5 text-sm text-paper/60">导入超声数据文件夹</p><p class="mt-2 text-xs leading-6 text-mist/35">系统自动识别图片、AVI 和 MP4，导入后即可开始脱敏</p></div>
+            <div><label for="file-input" class="mx-auto grid size-24 cursor-pointer place-items-center border border-dashed border-signal/30 bg-signal/5 font-mono text-2xl text-signal/50 transition hover:border-signal hover:bg-signal/10">＋</label><p class="mt-5 text-sm text-paper/60">导入超声数据文件夹</p><p class="mt-2 text-xs leading-6 text-mist/35">系统自动识别图片、AVI、MP4 和 WMV，导入后即可开始脱敏</p></div>
           </div>
 
           <div id="single-view" class="relative z-10 hidden min-h-0 flex-1 items-center justify-center overflow-hidden bg-black/25">
             <span class="absolute top-3 left-3 z-10 bg-ink/80 px-2 py-1 font-mono text-[9px] tracking-[0.16em] text-mist/70">SOURCE</span>
-            <img id="single-image" class="hidden size-full object-contain" alt="原始超声图片" /><video id="single-video" class="hidden size-full object-contain" controls muted playsinline></video><p id="single-avi-note" class="absolute right-3 bottom-3 hidden max-w-72 bg-ink/85 px-2 py-1.5 text-right text-[10px] leading-4 text-amber/90">AVI 原视频可能无法由浏览器预览；脱敏结果会输出为 MP4。</p>
+            <img id="single-image" class="hidden size-full object-contain" alt="原始超声图片" /><video id="single-video" class="hidden size-full object-contain" controls muted playsinline></video><p id="single-avi-note" class="absolute right-3 bottom-3 hidden max-w-72 bg-ink/85 px-2 py-1.5 text-right text-[10px] leading-4 text-amber/90">原视频正在转换为浏览器可播放的 MP4 预览。</p>
           </div>
 
           <div id="compare-view" class="relative z-10 hidden min-h-0 flex-1 grid-cols-1 md:grid-cols-2">
-            <figure class="relative grid min-h-64 place-items-center overflow-hidden border-b border-white/10 bg-black/25 md:border-r md:border-b-0"><span class="absolute top-3 left-3 z-10 bg-ink/80 px-2 py-1 font-mono text-[9px] tracking-[0.16em] text-mist/70">SOURCE</span><img id="compare-source-image" class="hidden size-full object-contain" alt="脱敏前超声图片" /><video id="compare-source-video" class="hidden size-full object-contain" controls muted playsinline></video><p id="compare-avi-note" class="absolute right-3 bottom-3 hidden max-w-72 bg-ink/85 px-2 py-1.5 text-right text-[10px] leading-4 text-amber/90">AVI 原视频可能无法由浏览器预览；脱敏结果会输出为 MP4。</p></figure>
+            <figure class="relative grid min-h-64 place-items-center overflow-hidden border-b border-white/10 bg-black/25 md:border-r md:border-b-0"><span class="absolute top-3 left-3 z-10 bg-ink/80 px-2 py-1 font-mono text-[9px] tracking-[0.16em] text-mist/70">SOURCE</span><img id="compare-source-image" class="hidden size-full object-contain" alt="脱敏前超声图片" /><video id="compare-source-video" class="hidden size-full object-contain" controls muted playsinline></video><p id="compare-avi-note" class="absolute right-3 bottom-3 hidden max-w-72 bg-ink/85 px-2 py-1.5 text-right text-[10px] leading-4 text-amber/90">原视频正在转换为浏览器可播放的 MP4 预览。</p></figure>
             <figure class="relative grid min-h-64 place-items-center overflow-hidden bg-black/25"><span id="compare-result-label" class="absolute top-3 left-3 z-10 bg-ink/80 px-2 py-1 font-mono text-[9px] tracking-[0.16em] text-signal">CLEAN ROI</span><img id="compare-result-image" class="hidden size-full object-contain" alt="脱敏后超声图片" /><video id="compare-result-video" class="hidden size-full object-contain" muted playsinline></video><div id="result-placeholder" class="px-6 text-center"><div class="mx-auto mb-4 grid size-16 place-items-center rounded-full border border-signal/20 text-xl text-signal/30">⌁</div><p id="result-message" class="text-xs leading-6 text-mist/35">正在处理</p></div></figure>
           </div>
 

@@ -171,13 +171,17 @@ models/yolo11s_roi.pt
 uv run uvicorn api.main:app --host 0.0.0.0 --port 8000
 ```
 
+Docker 镜像默认将正式模型 `models/yolo11s_roi.pt` 打包到容器内的
+`/app/models/yolo11s_roi.pt`。当前正式模型为 v5；若通过 volume 挂载同一路径，
+则以挂载的模型文件为准。
+
 浏览器操作页面：
 
 ```text
 http://localhost:8000/
 ```
 
-页面直接进入统一的数据脱敏工作台，不要求用户区分单张图片、批量图片或视频。选择数据文件夹后，系统自动识别 JPG、JPEG、PNG、BMP、AVI 和 MP4：左侧先显示当前原始文件，右侧列表显示文件名、大小和处理状态。AVI 导入后会自动生成浏览器可播放的 MP4 原视频预览；最终脱敏结果同样统一输出为 MP4。用户可以选择“脱敏当前文件”，也可以选择“全部脱敏”；完成当前文件后，可使用“重新脱敏当前文件”仅重跑该文件。清洗结果返回 `anonymized`：`true` 表示本次确实移除了顶部信息区域，`false` 表示无需裁切。单个文件失败不会中断剩余任务；成功结果可以逐个下载，不生成 ZIP 文件。
+页面直接进入统一的数据脱敏工作台，不要求用户区分单张图片、批量图片或视频。选择数据文件夹后，系统自动识别 JPG、JPEG、PNG、BMP、AVI、MP4 和 WMV：左侧先显示当前原始文件，右侧列表显示文件名、大小和处理状态。AVI、WMV 导入后会自动生成浏览器可播放的 MP4 原视频预览；最终脱敏结果同样统一输出为 MP4。用户可以选择“脱敏当前文件”，也可以选择“全部脱敏”；完成当前文件后，可使用“重新脱敏当前文件”仅重跑该文件。清洗结果返回 `anonymized`：`true` 表示本次确实移除了顶部信息区域，`false` 表示无需裁切。单个文件失败不会中断剩余任务；成功结果可以逐个下载，不生成 ZIP 文件。
 
 文件浏览快捷键：按 `A` 选择上一个文件，按 `D` 选择下一个文件。焦点位于文件名搜索框时不会触发快捷键。
 
@@ -230,6 +234,20 @@ curl -X POST \
   http://localhost:8000/api/v1/video/clean
 ```
 
+判断图片或视频是否需要脱敏（仅检测，不生成输出文件）：
+
+```bash
+curl -X POST \
+  -F file=@test.avi \
+  http://localhost:8000/api/v1/video/check
+```
+
+`/api/v1/video/check` 根据文件扩展名自动分流：JPG、JPEG、PNG、BMP 沿用
+`/api/v1/image/check` 的图片判断规则；AVI、MP4、WMV 按 `video.check_interval` 每隔 5 帧
+检测一次，并补检最后一帧。任意抽样帧需要移除顶部区域时，
+`needs_anonymization` 为 `true`。若没有抽样帧需要裁切，但存在无法识别的抽样帧，
+返回 `ROI_NOT_FOUND`，不会将结果标记为无需脱敏。
+
 服务器目录批量脱敏：
 
 ```bash
@@ -238,7 +256,7 @@ curl -X POST http://localhost:8000/api/v1/crop/directory \
   -d '{"path":"/absolute/path/to/study"}'
 ```
 
-接口递归处理目录中的 JPG、JPEG、PNG、BMP、AVI 和 MP4 文件，跳过其他格式。
+接口递归处理目录中的 JPG、JPEG、PNG、BMP、AVI、MP4 和 WMV 文件，跳过其他格式。
 输出写入输入目录内的 `cropped/`，并保留原有子目录结构；该输出目录不会被
 再次作为输入扫描。
 图片和视频使用当前 YOLO 模型定位顶部边界；裁切后的视频通过

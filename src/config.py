@@ -10,6 +10,7 @@ import yaml
 @dataclass(frozen=True, slots=True)
 class VideoConfig:
     detect_interval: int
+    check_interval: int
     output_fps: float | None
 
 
@@ -42,6 +43,9 @@ def _parse_video_config(value: Any) -> VideoConfig:
     detect_interval = int(raw.get("detect_interval", 30))
     if detect_interval <= 0:
         raise ValueError("video.detect_interval must be a positive integer")
+    check_interval = int(raw.get("check_interval", 5))
+    if check_interval <= 0:
+        raise ValueError("video.check_interval must be a positive integer")
 
     output_fps_value = raw.get("output_fps", "same")
     if isinstance(output_fps_value, str) and output_fps_value.lower() == "same":
@@ -50,7 +54,11 @@ def _parse_video_config(value: Any) -> VideoConfig:
         output_fps = float(output_fps_value)
         if output_fps <= 0:
             raise ValueError("video.output_fps must be 'same' or a positive number")
-    return VideoConfig(detect_interval=detect_interval, output_fps=output_fps)
+    return VideoConfig(
+        detect_interval=detect_interval,
+        check_interval=check_interval,
+        output_fps=output_fps,
+    )
 
 
 def load_config(config_path: str | Path, project_root: str | Path) -> AppConfig:
@@ -65,9 +73,7 @@ def load_config(config_path: str | Path, project_root: str | Path) -> AppConfig:
     if not 0.0 <= threshold <= 1.0:
         raise ValueError("confidence.threshold must be between 0 and 1")
     crop = raw.get("crop") or {}
-    top_boundary_tolerance_pixels = int(
-        crop.get("top_boundary_tolerance_pixels", 5)
-    )
+    top_boundary_tolerance_pixels = int(crop.get("top_boundary_tolerance_pixels", 5))
     if top_boundary_tolerance_pixels < 0:
         raise ValueError(
             "crop.top_boundary_tolerance_pixels must be a non-negative integer"

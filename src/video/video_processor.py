@@ -21,6 +21,7 @@ class VideoProcessResult:
     inference_time_ms: float
     initial_roi: ROIResult
     total_time_seconds: float
+    anonymized: bool
 
 
 class VideoProcessor:
@@ -39,9 +40,7 @@ class VideoProcessor:
         if output_fps is not None and output_fps <= 0:
             raise ValueError("output_fps must be positive or None")
         if top_boundary_tolerance_pixels < 0:
-            raise ValueError(
-                "top_boundary_tolerance_pixels must be non-negative"
-            )
+            raise ValueError("top_boundary_tolerance_pixels must be non-negative")
         self.detector = detector
         self.detect_interval = detect_interval
         self.output_size = output_size
@@ -58,6 +57,7 @@ class VideoProcessor:
         current_roi: ROIResult | None = None
         initial_roi: ROIResult | None = None
         writer: VideoWriter | None = None
+        anonymized = False
 
         with FrameExtractor(input_video) as extractor:
             effective_fps = self.output_fps or extractor.fps
@@ -89,6 +89,7 @@ class VideoProcessor:
                                 )
                                 if initial_roi is None:
                                     initial_roi = current_roi
+                                anonymized = anonymized or current_roi.bbox[1] > 0
                         if current_roi is None:
                             raise CleanerError(ErrorCode.ROI_NOT_FOUND)
 
@@ -129,4 +130,5 @@ class VideoProcessor:
                 inference_time_ms=inference_time_ms,
                 initial_roi=initial_roi,
                 total_time_seconds=perf_counter() - started,
+                anonymized=anonymized,
             )

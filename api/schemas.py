@@ -41,6 +41,17 @@ class VideoCleanResponse(BaseModel):
     output: str
 
 
+class VideoCheckResponse(BaseModel):
+    success: bool = True
+    needs_anonymization: bool
+    confidence: float
+    bbox: list[int]
+    top_crop_pixels: int
+    sampled_frames: int
+    detected_frames: int
+    failed_frames: int
+
+
 class VideoPreviewResponse(BaseModel):
     success: bool = True
     output: str

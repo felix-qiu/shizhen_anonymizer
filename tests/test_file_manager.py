@@ -37,3 +37,13 @@ def test_file_manager_accepts_avi_and_outputs_mp4(tmp_path: Path) -> None:
     assert uploaded.suffix == ".avi"
     assert manager.output_path(uploaded, "video").suffix == ".mp4"
     assert manager.preview_path(uploaded).name.endswith("_preview.mp4")
+
+
+def test_file_manager_accepts_wmv_and_outputs_mp4(tmp_path: Path) -> None:
+    manager = FileManager(tmp_path / "input", tmp_path / "output")
+
+    uploaded = manager.save_upload(BytesIO(b"wmv"), "scan.wmv", "video")
+
+    assert uploaded.suffix == ".wmv"
+    assert manager.output_path(uploaded, "video").suffix == ".mp4"
+    assert manager.preview_path(uploaded).name.endswith("_preview.mp4")

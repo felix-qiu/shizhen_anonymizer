@@ -48,3 +48,21 @@ def test_invalid_video_has_stable_error_code(tmp_path: Path) -> None:
         FrameExtractor(video_path)
 
     assert error.value.code is ErrorCode.VIDEO_OPEN_FAILED
+
+
+def test_wmv_uses_ffprobe_frame_count_and_average_fps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mp4_path = tmp_path / "input.mp4"
+    wmv_path = tmp_path / "input.wmv"
+    create_test_video(mp4_path)
+    mp4_path.rename(wmv_path)
+    monkeypatch.setattr(
+        FrameExtractor,
+        "_probe_wmv_timing",
+        staticmethod(lambda _path: (33.45, 166)),
+    )
+
+    with FrameExtractor(wmv_path) as extractor:
+        assert extractor.fps == pytest.approx(33.45)
+        assert extractor.total_frames == 166

@@ -2,7 +2,7 @@
 
 const FILE_TYPES = {
   image: { endpoint: "/api/v1/image/clean", extensions: ["jpg", "jpeg", "png", "bmp"] },
-  video: { endpoint: "/api/v1/video/clean", extensions: ["avi", "mp4"] },
+  video: { endpoint: "/api/v1/video/clean", extensions: ["avi", "mp4", "wmv"] },
 };
 
 const ERROR_MESSAGES = {
@@ -254,26 +254,27 @@ function updateCurrentActions(item = items[selectedIndex]) {
   elements.recleanCurrent.disabled = !isComplete;
 }
 
-function isAvi(item) {
-  return item.kind === "video" && extensionOf(item.file.name) === "avi";
+function needsVideoPreview(item) {
+  return item.kind === "video" && ["avi", "wmv"].includes(extensionOf(item.file.name));
 }
 
 function updateAviPreviewNote(item) {
-  const visible = isAvi(item) && item.previewState !== "READY";
+  const visible = needsVideoPreview(item) && item.previewState !== "READY";
+  const format = extensionOf(item.file.name).toUpperCase();
   [elements.singleAviNote, elements.compareAviNote].forEach((note) => {
     note.classList.toggle("hidden", !visible);
     if (item.previewState === "PROCESSING") {
-      note.textContent = "正在生成可播放的 AVI 预览…";
+      note.textContent = `正在生成可播放的 ${format} 预览…`;
     } else if (item.previewState === "FAILED") {
-      note.textContent = "无法生成 AVI 原视频预览；仍可尝试脱敏并查看 MP4 结果。";
+      note.textContent = `无法生成 ${format} 原视频预览；仍可尝试脱敏并查看 MP4 结果。`;
     } else {
-      note.textContent = "正在准备 AVI 原视频预览…";
+      note.textContent = `正在准备 ${format} 原视频预览…`;
     }
   });
 }
 
 async function ensureAviPreview(item) {
-  if (!isAvi(item) || item.previewState !== "IDLE") return;
+  if (!needsVideoPreview(item) || item.previewState !== "IDLE") return;
   item.previewState = "PROCESSING";
   updateAviPreviewNote(item);
   const formData = new FormData();
@@ -285,13 +286,13 @@ async function ensureAviPreview(item) {
     });
     const payload = await response.json();
     if (!response.ok || !payload.success) {
-      throw new Error(payload.error || "无法生成 AVI 预览");
+      throw new Error(payload.error || "无法生成视频预览");
     }
     item.previewUrl = `/api/v1/output/${encodeURIComponent(payload.output)}`;
     item.previewState = "READY";
   } catch (error) {
     item.previewState = "FAILED";
-    item.previewError = error.message || "无法生成 AVI 预览";
+    item.previewError = error.message || "无法生成视频预览";
   }
   if (selectedIndex === item.index) showItem(item.index);
 }
@@ -395,7 +396,7 @@ function clearSelection() {
   elements.listEmpty.classList.remove("hidden");
   elements.fileSearch.value = "";
   elements.selectionName.textContent = "尚未导入数据";
-  elements.selectionMeta.textContent = "支持 JPG / JPEG / PNG / BMP / AVI / MP4";
+  elements.selectionMeta.textContent = "支持 JPG / JPEG / PNG / BMP / AVI / MP4 / WMV";
   elements.fileCounter.textContent = "0 FILES";
   elements.summary.textContent = "READY · 等待导入";
   elements.clean.disabled = true;
@@ -434,7 +435,7 @@ function acceptFiles(fileList) {
     })
     .filter((entry) => entry.kind);
   if (!supported.length) {
-    showError("文件夹中没有找到支持的图片、AVI 或 MP4 视频。");
+    showError("文件夹中没有找到支持的图片、AVI、MP4 或 WMV 视频。");
     return;
   }
   const selected = supported.sort((a, b) => (a.file.webkitRelativePath || a.file.name).localeCompare(b.file.webkitRelativePath || b.file.name, "zh-CN", { numeric: true }));

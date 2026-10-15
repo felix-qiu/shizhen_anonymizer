@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import pytest
 
+from service.video_service import VideoService
 from src.detector.roi_detector import ROIDetector, ROIResult
 from src.errors import CleanerError, ErrorCode
 from src.video.video_processor import VideoProcessor
@@ -75,6 +76,74 @@ def test_video_processor_uses_only_detected_top_boundary(tmp_path: Path) -> None
     ).process(input_path, output_path)
 
     assert result.initial_roi.bbox == [0, 6, 32, 24]
+    assert result.anonymized is True
+
+
+def test_video_check_samples_every_five_frames_and_the_last_frame(
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "input.mp4"
+    create_test_video(input_path, frame_count=12)
+    detector = CountingDetector(
+        [
+            ROIResult(0.90, [2, 2, 30, 22]),
+            ROIResult(0.91, [2, 2, 30, 22]),
+            ROIResult(0.92, [2, 2, 30, 22]),
+            ROIResult(0.99, [2, 6, 30, 22]),
+        ]
+    )
+    service = VideoService(
+        detector,
+        detect_interval=30,
+        output_size=None,
+        output_fps=None,
+        check_interval=5,
+    )
+
+    result = service.check(input_path)
+
+    assert detector.calls == 4
+    assert result.sampled_frames == 4
+    assert result.detected_frames == 4
+    assert result.failed_frames == 0
+    assert result.needs_anonymization is True
+    assert result.top_crop_pixels == 6
+
+
+def test_video_check_does_not_treat_an_unrecognized_sample_as_safe(
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "input.mp4"
+    create_test_video(input_path, frame_count=6)
+    detector = CountingDetector([ROIResult(0.95, [2, 2, 30, 22]), None])
+    service = VideoService(
+        detector,
+        detect_interval=30,
+        output_size=None,
+        output_fps=None,
+        check_interval=5,
+    )
+
+    with pytest.raises(CleanerError) as error:
+        service.check(input_path)
+
+    assert error.value.code is ErrorCode.ROI_NOT_FOUND
+
+
+def test_video_process_reports_later_anonymized_frames(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.mp4"
+    output_path = tmp_path / "output.mp4"
+    create_test_video(input_path, frame_count=4)
+    detector = CountingDetector(
+        [ROIResult(0.90, [2, 2, 30, 22]), ROIResult(0.95, [2, 6, 30, 22])]
+    )
+
+    result = VideoProcessor(detector, detect_interval=2).process(
+        input_path, output_path
+    )
+
+    assert result.initial_roi.bbox[1] == 0
+    assert result.anonymized is True
 
 
 def test_first_frame_without_roi_fails(tmp_path: Path) -> None:

@@ -15,5 +15,7 @@ crop:
   top_boundary_tolerance_pixels: 2
 
 video:
+  # “是否需要脱敏”检查每隔 5 帧检测一次，并补检最后一帧。
+  check_interval: 5
   detect_interval: 30
   output_fps: same

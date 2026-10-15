@@ -35,7 +35,7 @@ class DirectoryProcessResult:
 class DirectoryService:
     """Process supported media recursively while preserving relative paths."""
 
-    VIDEO_EXTENSIONS: ClassVar[set[str]] = {".avi", ".mp4"}
+    VIDEO_EXTENSIONS: ClassVar[set[str]] = FileManager.VIDEO_EXTENSIONS
 
     def __init__(
         self,
