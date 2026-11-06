@@ -43,6 +43,11 @@ models/yolo11s_roi.pt
 
 仓库不附带模型权重。模型路径、运行设备、置信度阈值和输出尺寸均在 `config/config.yaml` 中配置。`device.type: auto` 会在 CUDA 可用时选择 GPU，否则使用 CPU。
 
+最新训练产物为 `models/trained/yolo11s_ultrasound_roi_v6.pt`，稳定推理入口
+`models/yolo11s_roi.pt` 当前仍为 v5。训练完成不会自动替换服务模型。
+v6 的训练指标、回测范围和切换方法见 [模型记录](models/README.md)与
+[训练文档](training/README.md#v6-训练记录2026-11-05)。
+
 ## 运行示例
 
 默认读取 `input/test.png` 并写入 `output/test_clean.png`：
@@ -174,6 +179,26 @@ uv run uvicorn api.main:app --host 0.0.0.0 --port 8000
 Docker 镜像默认将正式模型 `models/yolo11s_roi.pt` 打包到容器内的
 `/app/models/yolo11s_roi.pt`。当前正式模型为 v5；若通过 volume 挂载同一路径，
 则以挂载的模型文件为准。
+
+切换到 v6 无需修改 Dockerfile，可将 v6 权重挂载到稳定入口：
+
+```yaml
+volumes:
+  - ./data/models/yolo11s_ultrasound_roi_v6.pt:/app/models/yolo11s_roi.pt:ro
+```
+
+挂载路径必须与容器内实际配置的模型路径一致。修改 Compose 挂载后应重新创建容器；
+只拉取镜像或执行 `docker restart` 不会应用新的挂载配置。
+检测器在服务启动时缓存模型，替换权重后也需要重启服务。
+
+### 视频帧率校验
+
+AVI、MP4、WMV 统一校验 OpenCV 读取的帧率：`0 < FPS <= 120` 时直接采用。
+超出该范围时调用 `ffprobe -count_frames`，以实际解码帧数除以流时长恢复平均帧率，
+避免 WMV/ASF 被误读为 1000 FPS 后生成时长异常的视频。
+二次计算失败，或计算结果仍不在该范围内时，返回 `VIDEO_OPEN_FAILED`。
+120 是当前实现的固定校验阈值，不是文件损坏的证明；合法的高帧率视频也可能被拒绝。
+`ffprobe` 需要在运行环境中可用，单次探测超时为 30 秒。
 
 浏览器操作页面：
 

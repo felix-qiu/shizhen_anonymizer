@@ -114,3 +114,60 @@ cp models/trained/yolo11s_ultrasound_roi_v1.pt models/yolo11s_roi.pt
 ```
 
 替换前应保留旧模型、训练配置、数据集版本和验证指标，以便回滚和复现。不要直接使用 `last.pt` 替换生产模型。
+
+## v6 训练记录（2026-11-05）
+
+AnyLabeling 导出使用 YOLO Detection，类别仅为 `ultrasound_roi`；保留文件名，
+导出时不做随机拆分，合并和去重后统一分组。标注框顶部是期望保留区域的起点；
+本项目数据准备流程将左右和底边固定到图像边界，只学习顶部裁切位置。
+
+本次导出已包含旧数据，无需再次叠加 v5：1926 对图片和标签经 SHA256 去重后为
+1820 张，旧 v5 的 1424 张全部保留，新增 396 张。
+`datasets/ultrasound_roi_v6/manifest.json` 记录来源、哈希、分组、集合和顶部坐标；
+`summary.json` 记录统计和划分策略。旧数据保持 v5 集合归属，新病例分组后划分，
+最终为 train 1285 / val 356 / test 179。
+
+上述保留 v5 集合归属的准备步骤使用了本次临时脚本；
+通用 `tools/prepare_roi_dataset.py` 会重新划分全部分组，不能直接替代该策略。
+病例图片、来源清单和临时脚本不纳入本次提交。
+
+在数据集及 v5 权重已经准备好的环境中，训练命令为：
+
+```bash
+uv run python training/train.py \
+  --model models/trained/yolo11s_ultrasound_roi_v5.pt \
+  --data datasets/ultrasound_roi_v6/dataset.yaml \
+  --epochs 100 --imgsz 640 --batch 8 --device mps \
+  --output-dir runs --name train_1820_top_boundary_v6
+```
+
+上面的运行名是本次已完成实验；重复训练请使用新名称，避免混淆产物。
+CPU 机器使用 `--device cpu`。本次后台执行使用 `caffeinate -i` 防止空闲睡眠，
+其训练后验证和导出串联由临时流程完成，`training/train.py` 本身不会自动执行这些步骤。
+
+查看本次日志：
+
+```bash
+tail -f logs/train_1820_top_boundary_v6.log
+```
+
+验证、版本化导出命令：
+
+```bash
+uv run python training/validate.py \
+  --model runs/train_1820_top_boundary_v6/weights/best.pt \
+  --data datasets/ultrasound_roi_v6/dataset.yaml --imgsz 640
+
+uv run python training/export.py \
+  --model runs/train_1820_top_boundary_v6/weights/best.pt \
+  --format pt --version v6 --output-dir models/trained
+```
+
+本次独立验证结果保存在 `runs/val_1820_top_boundary_v6`，
+指标摘要保存在 `logs/train_1820_top_boundary_v6_validation.json`。
+手动验证命令默认由 Ultralytics 选择新验证目录，不保证使用上述目录名。
+本次模型指标、SHA256 和回测限制见 [模型记录](../models/README.md)。
+
+部署时可挂载 v6 到 `/app/models/yolo11s_roi.pt`，并重新创建容器；
+也可以备份当前稳定权重后，再复制 v6 到稳定入口并重启服务。
+仅生成 `models/trained/yolo11s_ultrasound_roi_v6.pt` 不会自动切换线上模型。
