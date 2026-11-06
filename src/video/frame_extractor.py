@@ -32,9 +32,11 @@ class VideoFrame:
 class FrameExtractor:
     """Open a video once and yield frames without buffering the whole file."""
 
+    MAX_REASONABLE_FPS = 120.0
+
     @staticmethod
-    def _probe_wmv_timing(video_path: Path) -> tuple[float, int] | None:
-        """Recover average WMV FPS when OpenCV exposes the ASF time base as FPS."""
+    def _probe_video_timing(video_path: Path) -> tuple[float, int] | None:
+        """Recover average FPS and frame count from decoded stream timing."""
 
         try:
             completed = subprocess.run(
@@ -69,6 +71,10 @@ class FrameExtractor:
         except (OSError, subprocess.TimeoutExpired, ValueError, TypeError, json.JSONDecodeError):
             return None
 
+    @classmethod
+    def _is_reasonable_fps(cls, fps: float) -> bool:
+        return 0 < fps <= cls.MAX_REASONABLE_FPS
+
     def __init__(self, video_path: str | Path) -> None:
         self.video_path = Path(video_path)
         if not self.video_path.is_file():
@@ -81,10 +87,15 @@ class FrameExtractor:
 
         fps = float(self._capture.get(cv2.CAP_PROP_FPS))
         total_frames = round(self._capture.get(cv2.CAP_PROP_FRAME_COUNT))
-        if self.video_path.suffix.lower() == ".wmv":
-            probed_timing = self._probe_wmv_timing(self.video_path)
-            if probed_timing is not None:
-                fps, total_frames = probed_timing
+        if not self._is_reasonable_fps(fps):
+            probed_timing = self._probe_video_timing(self.video_path)
+            if probed_timing is None or not self._is_reasonable_fps(probed_timing[0]):
+                self.close()
+                raise CleanerError(
+                    ErrorCode.VIDEO_OPEN_FAILED,
+                    f"invalid video FPS: {fps}",
+                )
+            fps, total_frames = probed_timing
 
         self.metadata = VideoMetadata(
             width=round(self._capture.get(cv2.CAP_PROP_FRAME_WIDTH)),

@@ -50,19 +50,42 @@ def test_invalid_video_has_stable_error_code(tmp_path: Path) -> None:
     assert error.value.code is ErrorCode.VIDEO_OPEN_FAILED
 
 
-def test_wmv_uses_ffprobe_frame_count_and_average_fps(
+def test_abnormal_fps_uses_ffprobe_frame_count_and_average_fps(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    mp4_path = tmp_path / "input.mp4"
-    wmv_path = tmp_path / "input.wmv"
-    create_test_video(mp4_path)
-    mp4_path.rename(wmv_path)
+    video_path = tmp_path / "input.avi"
+    video_path.write_bytes(b"video")
+
+    class FakeCapture:
+        def isOpened(self) -> bool:
+            return True
+
+        def get(self, property_id: int) -> float:
+            return {
+                cv2.CAP_PROP_FRAME_WIDTH: 1280,
+                cv2.CAP_PROP_FRAME_HEIGHT: 960,
+                cv2.CAP_PROP_FPS: 1000,
+                cv2.CAP_PROP_FRAME_COUNT: 4962,
+            }.get(property_id, 0)
+
+        def release(self) -> None:
+            pass
+
+    monkeypatch.setattr(cv2, "VideoCapture", lambda _path: FakeCapture())
     monkeypatch.setattr(
         FrameExtractor,
-        "_probe_wmv_timing",
+        "_probe_video_timing",
         staticmethod(lambda _path: (33.45, 166)),
     )
 
-    with FrameExtractor(wmv_path) as extractor:
+    with FrameExtractor(video_path) as extractor:
         assert extractor.fps == pytest.approx(33.45)
         assert extractor.total_frames == 166
+
+
+@pytest.mark.parametrize(
+    ("fps", "expected"),
+    [(0.0, False), (-1.0, False), (30.0, True), (120.0, True), (120.01, False)],
+)
+def test_reasonable_fps_range(fps: float, expected: bool) -> None:
+    assert FrameExtractor._is_reasonable_fps(fps) is expected
